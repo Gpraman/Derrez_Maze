@@ -1,134 +1,148 @@
 <!DOCTYPE html>
-<html lang="el">
+<html>
   <head>
     <meta charset="utf-8">
-    <title>VR Duck Hunt - Level System</title>
-    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-
+    <title>Castle Crusher VR | Digital Arts Project</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-physics-system@v4.2.2/dist/aframe-physics-system.min.js"></script>
+    
     <script>
-      // Game State
+      // Καθολικές μεταβλητές παιχνιδιού
       let currentLevel = 1;
-      let ducksHitInLevel = 0;
-      let ammo = 3;
-      let timeLeft = 30; // 30 δευτερόλεπτα ανά πίστα
-      let gameInterval;
+      let timeLeft = 30;
+      let timerActive = false;
+      let timerInterval;
 
-      // Ρυθμίσεις Επιπέδων
-      function getLevelTarget() { return 5 + (currentLevel - 1) * 5; } // 5, 10, 15...
-
-      AFRAME.registerComponent('game-manager', {
+      AFRAME.registerComponent('game-logic', {
         init: function () {
+          this.el.addEventListener('click', (evt) => {
+            if (evt.detail.cursorEl) this.launchProjectile();
+          });
           this.startLevel();
         },
+
         startLevel: function () {
-          ducksHitInLevel = 0;
-          timeLeft = 30;
-          ammo = 3;
+          const container = document.querySelector('#castle-container');
+          container.innerHTML = ''; // Καθαρισμός
+          
+          // Ρύθμιση δυσκολίας
+          timeLeft = 30 + (currentLevel - 1) * 10;
           this.updateUI();
+          this.spawnCastle(currentLevel);
           
-          // Καθαρισμός παλιών timers αν υπάρχουν
-          if (gameInterval) clearInterval(gameInterval);
-          
-          // Έναρξη αντίστροφης μέτρησης
-          gameInterval = setInterval(() => {
-            timeLeft--;
-            this.updateUI();
-            if (timeLeft <= 0) {
-              this.levelFailed();
+          // Έναρξη Timer
+          timerActive = true;
+          if (timerInterval) clearInterval(timerInterval);
+          timerInterval = setInterval(() => {
+            if (timeLeft > 0) {
+              timeLeft--;
+              this.updateUI();
+              this.checkWinCondition();
+            } else {
+              this.gameOver();
             }
           }, 1000);
         },
-        updateUI: function () {
-          document.querySelector('#level-text').setAttribute('value', 'Level: ' + currentLevel);
-          document.querySelector('#target-text').setAttribute('value', 'Target: ' + ducksHitInLevel + '/' + getLevelTarget());
-          document.querySelector('#timer-text').setAttribute('value', 'Time: ' + timeLeft);
-          document.querySelector('#ammo-text').setAttribute('value', 'Ammo: ' + ammo);
-        },
-        levelSuccess: function () {
-          clearInterval(gameInterval);
-          alert("Level " + currentLevel + " Complete!");
-          currentLevel++;
-          this.startLevel();
-        },
-        levelFailed: function () {
-          clearInterval(gameInterval);
-          alert("Time's up! Restarting Level " + currentLevel);
-          // Διαγραφή υπαρχουσών παπιών
-          document.querySelectorAll('.duck').forEach(d => d.parentNode.removeChild(d));
-          this.startLevel();
-        }
-      });
 
-      AFRAME.registerComponent('duck-ai', {
-        init: function () {
-          let el = this.el;
-          this.direction = new THREE.Vector3((Math.random() - 0.5) * 2, (Math.random() * 0.4) + 0.1, (Math.random() - 0.5) * 1);
-          this.direction.normalize().multiplyScalar(0.05 + (currentLevel * 0.01));
-
-          el.addEventListener('click', () => {
-            if (ammo > 0) {
-              ducksHitInLevel++;
-              document.querySelector('[game-manager]').components['game-manager'].updateUI();
-              
-              el.setAttribute('color', '#f00');
-              setTimeout(() => { if(el.parentNode) el.parentNode.removeChild(el); }, 100);
-
-              if (ducksHitInLevel >= getLevelTarget()) {
-                document.querySelector('[game-manager]').components['game-manager'].levelSuccess();
-              }
-              ammo = 3; // Reset ammo on hit
+        spawnCastle: function (level) {
+          const container = document.querySelector('#castle-container');
+          const rows = 3 + level; // Περισσότερες σειρές ανά level
+          const cols = 3;
+          
+          for (let y = 0; y < rows; y++) {
+            for (let x = 0; x < cols; x++) {
+              let block = document.createElement('a-box');
+              // Αυξάνουμε τη μάζα σταδιακά για να είναι πιο "γερό" το κάστρο
+              let mass = 1 + (level * 0.5); 
+              block.setAttribute('dynamic-body', `mass: ${mass}; friction: 0.5`);
+              block.setAttribute('width', '0.8');
+              block.setAttribute('height', '0.8');
+              block.setAttribute('depth', '0.8');
+              block.setAttribute('position', `${x - 1} ${y * 0.8 + 0.4} -12`);
+              block.setAttribute('color', level % 2 === 0 ? '#708090' : '#4b5320');
+              block.setAttribute('class', 'castle-block');
+              container.appendChild(block);
             }
-          });
+          }
         },
-        tick: function () {
-          let pos = this.el.getAttribute('position');
-          pos.x += this.direction.x; pos.y += this.direction.y; pos.z += this.direction.z;
-          this.el.setAttribute('position', pos);
-          if (pos.y > 10 || Math.abs(pos.x) > 15) { if(this.el.parentNode) this.el.parentNode.removeChild(this.el); ammo = 3; }
+
+        launchProjectile: function () {
+          const ball = document.querySelector('#projectile');
+          // Επαναφορά σφαίρας μπροστά από την κάμερα
+          ball.setAttribute('position', '0 1.5 -2');
+          ball.body.velocity.set(0, 0, 0);
+          ball.body.angularVelocity.set(0, 0, 0);
+          
+          // Ώθηση προς τα εμπρός (Z-axis) και λίγο πάνω (Y-axis)
+          const force = -40; 
+          ball.body.applyImpulse(
+            new CANNON.Vec3(0, 5, force), 
+            new CANNON.Vec3(0, 0, 0)
+          );
+        },
+
+        checkWinCondition: function () {
+          const blocks = document.querySelectorAll('.castle-block');
+          let fallenBlocks = 0;
+          blocks.forEach(b => {
+            if (b.object3D.position.y < 0.3) fallenBlocks++;
+          });
+
+          // Αν πέσει το 80% των blocks, πας στο επόμενο level
+          if (fallenBlocks > blocks.length * 0.8) {
+            clearInterval(timerInterval);
+            if (currentLevel < 10) {
+              alert(`Level ${currentLevel} ολοκληρώθηκε! Πάμε στο επόμενο.`);
+              currentLevel++;
+              this.startLevel();
+            } else {
+              alert("Κέρδισες το παιχνίδι!");
+              currentLevel = 1;
+              this.startLevel();
+            }
+          }
+        },
+
+        gameOver: function () {
+          clearInterval(timerInterval);
+          alert("Ο χρόνος τελείωσε! Προσπάθησε ξανά.");
+          currentLevel = 1;
+          this.startLevel();
+        },
+
+        updateUI: function () {
+          document.querySelector('#timerDisplay').setAttribute('value', `Time: ${timeLeft}`);
+          document.querySelector('#levelDisplay').setAttribute('value', `Level: ${currentLevel}`);
         }
       });
-
-      window.addEventListener('click', () => { if (ammo > 0) { ammo--; document.querySelector('[game-manager]').components['game-manager'].updateUI(); } });
     </script>
   </head>
   <body>
-    <a-scene background="color: #87CEEB" game-manager spawner="interval: 2500">
+    <a-scene physics="gravity: -9.8; debug: false" game-logic>
       
-      <a-camera position="0 1.6 0" look-controls>
-        <a-entity cursor="fuse: true; fuseTimeout: 200" raycaster="objects: .clickable" position="0 0 -1"
-                  geometry="primitive: ring; radiusInner: 0.015; radiusOuter: 0.025" material="color: white; shader: flat"></a-entity>
-        
-        <a-entity position="0 1 -2">
-            <a-text id="level-text" value="Level: 1" position="-1.5 0.2 0" color="#000" width="3"></a-text>
-            <a-text id="target-text" value="Target: 0/5" position="-1.5 0 0" color="#000" width="3"></a-text>
-            <a-text id="timer-text" value="Time: 30" position="1 0.2 0" color="#f00" width="3"></a-text>
-            <a-text id="ammo-text" value="Ammo: 3" position="1 0 0" color="#333" width="3"></a-text>
-        </a-entity>
-      </a-camera>
+      <a-assets>
+        <img id="groundTex" src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@master/examples/textures/terrain/grasslight-big.jpg">
+      </a-assets>
 
-      <a-plane position="0 0 -10" rotation="-90 0 0" width="100" height="100" color="#228B22"></a-plane>
       <a-sky color="#87CEEB"></a-sky>
+      <a-plane static-body rotation="-90 0 0" width="100" height="100" src="#groundTex" repeat="20 20"></a-plane>
 
-      <a-entity id="spawner" spawner></a-entity>
+      <a-entity position="0 3.5 -4">
+        <a-text id="timerDisplay" value="" align="center" color="#FF0000" scale="1.5 1.5 1.5"></a-text>
+        <a-text id="levelDisplay" value="" align="center" position="0 -0.6 0" color="#000"></a-text>
+        <a-text value="Click to Shoot!" align="center" position="0 -1.2 0" color="#333" scale="0.8 0.8 0.8"></a-text>
+      </a-entity>
+
+      <a-sphere id="projectile" dynamic-body="mass: 10" radius="0.4" color="#222" position="0 -10 0"></a-sphere>
+      
+      <a-box position="0 0.2 -2" width="1" height="0.4" depth="2" color="#5C4033" static-body></a-box>
+
+      <a-entity id="castle-container"></a-entity>
+
+      <a-entity camera look-controls position="0 1.6 0">
+        <a-cursor color="red"></a-cursor>
+      </a-entity>
+
     </a-scene>
-
-    <script>
-      // Απλό Spawner Script
-      AFRAME.registerComponent('spawner', {
-        init: function () {
-          setInterval(() => {
-            if(document.querySelectorAll('.duck').length < 3) {
-                let duck = document.createElement('a-box');
-                duck.setAttribute('class', 'duck clickable');
-                duck.setAttribute('duck-ai', '');
-                duck.setAttribute('width', '0.7'); duck.setAttribute('height', '0.5'); duck.setAttribute('depth', '0.7');
-                duck.setAttribute('color', '#654321');
-                duck.setAttribute('position', {x: (Math.random()-0.5)*10, y: 0.5, z: -12});
-                document.querySelector('a-scene').appendChild(duck);
-            }
-          }, 2000);
-        }
-      });
-    </script>
   </body>
 </html>

@@ -1,1 +1,28 @@
+<!DOCTYPE html>
+<html lang="el">
+  <head>
+    <meta charset="utf-8">
+    <title>Μη Ευκλείδειος Λαβύρινθος - VR II</title>
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+  </head>
+  <body>
+    <a-scene>
+      
+      <a-sky color="#0d0d0d"></a-sky> <a-plane position="0 0 0" rotation="-90 0 0" width="30" height="30" color="#1a1a1a"></a-plane> <a-light type="ambient" color="#444"></a-light>
+      <a-light type="point" position="0 3 0" color="#ffffff" intensity="0.8"></a-light>
 
+      <a-box position="0 1.5 -4" width="8" height="3" depth="0.5" color="#4CC3D9"></a-box>
+      
+      <a-box position="-4 1.5 -0.5" width="0.5" height="3" depth="7" color="#EF2D5E"></a-box>
+      
+      <a-box position="4 1.5 -0.5" width="0.5" height="3" depth="7" color="#FFC65D"></a-box>
+
+      <a-box position="-1.5 1.5 -1.5" width="4" height="3" depth="0.5" color="#7BC8A4"></a-box>
+
+      <a-entity position="0 1.6 3">
+        <a-camera look-controls wasd-controls></a-camera>
+      </a-entity>
+
+    </a-scene>
+  </body>
+</html>

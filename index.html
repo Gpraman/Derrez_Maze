@@ -2,142 +2,122 @@
 <html lang="el">
   <head>
     <meta charset="utf-8">
-    <title>Maze to Garden - VR Experience</title>
+    <title>VR Arkanoid - Custom Physics</title>
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
 
     <script>
       /* ========================================================
-         1. ΣΥΣΤΗΜΑ ΣΥΓΚΡΟΥΣΕΩΝ (WALL COLLIDER)
-         Αποτρέπει τον παίκτη από το να περνάει μέσα από τοίχους.
+         1. ΕΛΕΓΧΟΣ ΡΑΚΕΤΑΣ (Gaze-based Paddle)
+         Η ρακέτα ακολουθεί το σημείο που κοιτάζει η κάμερα.
          ======================================================== */
-      AFRAME.registerComponent('wall-collider', {
+      AFRAME.registerComponent('gaze-paddle', {
         tick: function () {
-          let el = this.el;
-          let pos = el.getAttribute('position');
-          let radius = 0.5; // Ο όγκος (ακτίνα) του παίκτη
-
-          // Βρίσκουμε όλα τα αντικείμενα που έχουν την κλάση "wall"
-          let walls = document.querySelectorAll('.wall');
-
-          walls.forEach(wall => {
-            let wPos = wall.getAttribute('position');
-            let wWidth = parseFloat(wall.getAttribute('width')) || 1;
-            let wDepth = parseFloat(wall.getAttribute('depth')) || 1;
-
-            // Υπολογισμός των ορίων του τοίχου + την ακτίνα του παίκτη
-            let minX = wPos.x - (wWidth / 2) - radius;
-            let maxX = wPos.x + (wWidth / 2) + radius;
-            let minZ = wPos.z - (wDepth / 2) - radius;
-            let maxZ = wPos.z + (wDepth / 2) + radius;
-
-            // Αν ο παίκτης μπει μέσα σε αυτά τα όρια (Σύγκρουση!)
-            if (pos.x > minX && pos.x < maxX && pos.z > minZ && pos.z < maxZ) {
-              // Βρίσκουμε από ποια πλευρά είναι πιο κοντά για να τον σπρώξουμε έξω
-              let distToMinX = Math.abs(pos.x - minX);
-              let distToMaxX = Math.abs(pos.x - maxX);
-              let distToMinZ = Math.abs(pos.z - minZ);
-              let distToMaxZ = Math.abs(pos.z - maxZ);
-              let minDist = Math.min(distToMinX, distToMaxX, distToMinZ, distToMaxZ);
-
-              // Διόρθωση θέσης
-              if (minDist === distToMinX) pos.x = minX;
-              if (minDist === distToMaxX) pos.x = maxX;
-              if (minDist === distToMinZ) pos.z = minZ;
-              if (minDist === distToMaxZ) pos.z = maxZ;
-
-              el.setAttribute('position', pos);
-            }
+          let cam = document.querySelector('#player').object3D;
+          let direction = new THREE.Vector3();
+          cam.getWorldDirection(direction); // Βρίσκουμε το διάνυσμα του βλέμματος
+          
+          // Η ρακέτα κινείται στους άξονες X, Y αλλά μένει "κλειδωμένη" στο Z = -2
+          this.el.setAttribute('position', {
+            x: direction.x * -6, // Πολλαπλασιαστής ταχύτητας αριστερά/δεξιά
+            y: 1.6 + (direction.y * 6), // 1.6 είναι το ύψος των ματιών
+            z: -2 
           });
         }
       });
 
       /* ========================================================
-         2. ΣΥΣΤΗΜΑ PORTAL (ΤΗΛΕΜΕΤΑΦΟΡΑ)
+         2. ΜΗΧΑΝΗ ΦΥΣΙΚΗΣ ΤΗΣ ΜΠΑΛΑΣ (Custom Physics Engine)
+         Διαχειρίζεται κίνηση, αναπηδήσεις και σπάσιμο τούβλων.
          ======================================================== */
-      AFRAME.registerComponent('portal', {
-        schema: { destination: {type: 'string'} },
+      AFRAME.registerComponent('ball-physics', {
         init: function () {
-          this.player = document.querySelector('#player');
-          this.isTeleporting = false;
+          // Η αρχική ταχύτητα της μπάλας (X, Y, Z)
+          this.velocity = {x: 0.05, y: 0.05, z: -0.1};
         },
         tick: function () {
-          if (this.isTeleporting) return;
-
-          let playerPos = this.player.getAttribute('position');
-          let portalPos = this.el.getAttribute('position');
+          let pos = this.el.getAttribute('position');
           
-          let dx = playerPos.x - portalPos.x;
-          let dz = playerPos.z - portalPos.z;
-          let distance = Math.sqrt(dx * dx + dz * dz);
+          // 1. Εφαρμογή της κίνησης (Προσθέτουμε την ταχύτητα στη θέση)
+          pos.x += this.velocity.x;
+          pos.y += this.velocity.y;
+          pos.z += this.velocity.z;
 
-          // Αν πλησιάσει στο 1.2 μέτρα, τηλεμεταφέρεται
-          if (distance < 1.2) {
-            this.isTeleporting = true;
-            let destPos = document.querySelector(this.data.destination).getAttribute('position');
-            
-            this.player.setAttribute('position', {x: destPos.x, y: playerPos.y, z: destPos.z});
-            
-            setTimeout(() => { this.isTeleporting = false; }, 1000);
+          // 2. ΑΝΑΠΗΔΗΣΕΙΣ ΣΤΟ ΤΟΥΝΕΛ
+          if (pos.x > 4 || pos.x < -4) this.velocity.x *= -1; // Δεξιά/Αριστερά
+          if (pos.y > 6 || pos.y < 0.2) this.velocity.y *= -1; // Ταβάνι/Πάτωμα
+          if (pos.z < -15) this.velocity.z *= -1; // Πίσω τοίχος
+
+          // 3. ΑΝΑΠΗΔΗΣΗ ΣΤΗ ΡΑΚΕΤΑ (Στο Z = -2)
+          let paddlePos = document.querySelector('#paddle').getAttribute('position');
+          if (pos.z > -2.2 && pos.z < -1.8) {
+            // Αν η μπάλα είναι μέσα στα όρια X και Y της ρακέτας
+            if (Math.abs(pos.x - paddlePos.x) < 1.5 && Math.abs(pos.y - paddlePos.y) < 1.0) {
+              this.velocity.z *= -1; // Αντίστροφη πορεία προς τα τούβλα!
+              
+              // Βάζουμε λίγο "φάλτσο" ανάλογα με το πού χτύπησε στη ρακέτα
+              this.velocity.x = (pos.x - paddlePos.x) * 0.05;
+              this.velocity.y = (pos.y - paddlePos.y) * 0.05;
+            }
           }
+
+          // 4. GAME OVER (Η μπάλα πέρασε πίσω από τον παίκτη)
+          if (pos.z > 1) {
+            pos.x = 0; pos.y = 2; pos.z = -5; // Reset στο κέντρο
+            this.velocity = {x: 0.05, y: 0.05, z: -0.1}; // Reset ταχύτητας
+          }
+
+          // 5. ΣΥΓΚΡΟΥΣΗ ΜΕ ΤΟΥΒΛΑ (Bricks)
+          let bricks = document.querySelectorAll('.brick');
+          for (let i = 0; i < bricks.length; i++) {
+            let brick = bricks[i];
+            let bPos = brick.getAttribute('position');
+            
+            // Υπολογισμός απόστασης Μπάλας - Τούβλου σε 3D (Πυθαγόρειο)
+            let dx = pos.x - bPos.x;
+            let dy = pos.y - bPos.y;
+            let dz = pos.z - bPos.z;
+            let distance = Math.sqrt(dx*dx + dy*dy + dz*dz);
+
+            if (distance < 1.0) { // Αν συγκρουστούν
+              this.velocity.z *= -1; // Η μπάλα γυρίζει πίσω
+              brick.parentNode.removeChild(brick); // Καταστροφή του τούβλου!
+              break; // Σπάμε μόνο 1 τούβλο ανά καρέ για να μη γίνει glitch
+            }
+          }
+
+          // Ενημέρωση της νέας θέσης στο 3D μοντέλο
+          this.el.setAttribute('position', pos);
         }
       });
     </script>
   </head>
   <body>
-    <a-scene background="color: #050505">
+    <a-scene background="color: #0a0a1a">
       
-      <a-camera id="player" position="0 1.6 0" look-controls wasd-controls="acceleration: 15" wall-collider></a-camera>
+      <a-camera id="player" position="0 1.6 0" look-controls wasd-controls="enabled: false"></a-camera>
 
-      <a-entity id="maze-environment">
-        <a-plane position="0 0 0" rotation="-90 0 0" width="200" height="200" color="#111"></a-plane>
+      <a-box id="paddle" width="2" height="1" depth="0.2" color="#00ffff" opacity="0.6" wireframe="true" gaze-paddle></a-box>
 
-        <a-box class="wall" position="-2 1.5 0" width="0.5" height="4" depth="15" color="#333"></a-box>
-        <a-box class="wall" position="2 1.5 0" width="0.5" height="4" depth="15" color="#333"></a-box>
-        <a-box class="wall" position="0 1.5 7.5" width="4.5" height="4" depth="0.5" color="#333"></a-box> <a-box class="wall" position="-6 1.5 -7.5" width="8" height="4" depth="0.5" color="#333"></a-box>
-        <a-box class="wall" position="-10 1.5 -12" width="0.5" height="4" depth="9" color="#333"></a-box>
-        <a-box class="wall" position="-2 1.5 -12" width="0.5" height="4" depth="9" color="#333"></a-box>
-        
-        <a-box class="wall" position="6 1.5 -7.5" width="8" height="4" depth="0.5" color="#333"></a-box>
-        <a-box class="wall" position="10 1.5 -12" width="0.5" height="4" depth="9" color="#333"></a-box>
+      <a-sphere id="ball" position="0 2 -5" radius="0.3" color="#ff00ff" ball-physics></a-sphere>
 
-        <a-box position="-6 1.5 -16" width="3" height="3" depth="0.2" color="#aa00ff" opacity="0.7" portal="destination: #spawn-point-B">
-          <a-text value="?" align="center" position="0 2 0.3" color="#fff"></a-text>
-        </a-box>
+      <a-plane position="0 0 -7.5" rotation="-90 0 0" width="10" height="15" color="#111" wireframe="true"></a-plane>
+      <a-box position="-4.5 3 -7.5" width="0.5" height="6" depth="15" color="#222"></a-box>
+      <a-box position="4.5 3 -7.5" width="0.5" height="6" depth="15" color="#222"></a-box>
+      <a-box position="0 6 -7.5" width="10" height="0.5" depth="15" color="#222"></a-box>
+      <a-box position="0 3 -15.5" width="10" height="6" depth="0.5" color="#00ffff" wireframe="true"></a-box>
 
-        <a-entity id="spawn-point-B" position="50 0 50"></a-entity>
-        
-        <a-box class="wall" position="50 1.5 45" width="10" height="4" depth="0.5" color="#442222"></a-box>
-        <a-box class="wall" position="45 1.5 50" width="0.5" height="4" depth="10" color="#442222"></a-box>
-        <a-box class="wall" position="55 1.5 50" width="0.5" height="4" depth="10" color="#442222"></a-box>
+      <a-entity id="brick-wall" position="0 0 0">
+        <a-box class="brick" position="-2 2 -12" width="1.5" height="0.8" depth="0.5" color="#ff3366"></a-box>
+        <a-box class="brick" position="0 2 -12" width="1.5" height="0.8" depth="0.5" color="#ff3366"></a-box>
+        <a-box class="brick" position="2 2 -12" width="1.5" height="0.8" depth="0.5" color="#ff3366"></a-box>
 
-        <a-box position="50 1.5 54" width="3" height="3" depth="0.2" color="#00ffaa" opacity="0.8" portal="destination: #garden-spawn">
-          <a-text value="EXIT" align="center" position="0 2 0.3" color="#000"></a-text>
-        </a-box>
-      </a-entity>
+        <a-box class="brick" position="-2 3 -12" width="1.5" height="0.8" depth="0.5" color="#ffaa00"></a-box>
+        <a-box class="brick" position="0 3 -12" width="1.5" height="0.8" depth="0.5" color="#ffaa00"></a-box>
+        <a-box class="brick" position="2 3 -12" width="1.5" height="0.8" depth="0.5" color="#ffaa00"></a-box>
 
-      <a-entity id="garden-environment" position="500 0 500">
-        <a-entity id="garden-spawn" position="500 0 505"></a-entity>
-
-        <a-sphere position="500 0 500" radius="50" color="#87CEEB" material="side: back"></a-sphere>
-
-        <a-plane position="500 0.01 500" rotation="-90 0 0" width="100" height="100" color="#7CFC00"></a-plane>
-
-        <a-entity position="500 0 490">
-          <a-cylinder position="0 1 0" radius="0.4" height="2" color="#8B4513"></a-cylinder>
-          <a-sphere position="0 3 0" radius="2" color="#228B22"></a-sphere>
-        </a-entity>
-
-        <a-entity position="495 0 495">
-          <a-cylinder position="0 1 0" radius="0.3" height="2" color="#8B4513"></a-cylinder>
-          <a-sphere position="0 2.5 0" radius="1.5" color="#228B22"></a-sphere>
-        </a-entity>
-        
-        <a-entity position="506 0 492">
-          <a-cylinder position="0 1.5 0" radius="0.5" height="3" color="#8B4513"></a-cylinder>
-          <a-sphere position="0 4 0" radius="2.5" color="#228B22"></a-sphere>
-        </a-entity>
-
-        <a-text value="You Escaped!" align="center" position="500 2 502" scale="2 2 2" color="#000"></a-text>
+        <a-box class="brick" position="-2 4 -12" width="1.5" height="0.8" depth="0.5" color="#00ffaa"></a-box>
+        <a-box class="brick" position="0 4 -12" width="1.5" height="0.8" depth="0.5" color="#00ffaa"></a-box>
+        <a-box class="brick" position="2 4 -12" width="1.5" height="0.8" depth="0.5" color="#00ffaa"></a-box>
       </a-entity>
 
     </a-scene>

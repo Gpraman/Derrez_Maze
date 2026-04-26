@@ -2,148 +2,91 @@
 <html lang="el">
   <head>
     <meta charset="utf-8">
-    <title>VR Arkanoid V2 - Refined Control & Lives</title>
+    <title>VR Rail Shooter - Prototype</title>
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
 
     <script>
       /* ========================================================
-         1. ΕΛΕΓΧΟΣ ΡΑΚΕΤΑΣ (Gaze-based Paddle)
+         1. ΣΥΣΤΗΜΑ ΚΙΝΗΣΗΣ (The Rail)
+         Μετακινεί τον παίκτη (το Rig) συνεχώς προς τα εμπρός.
          ======================================================== */
-      AFRAME.registerComponent('gaze-paddle', {
+      AFRAME.registerComponent('rail-mover', {
+        schema: { speed: { type: 'number', default: 0.15 } },
         tick: function () {
-          let cam = document.querySelector('#player').object3D;
-          let direction = new THREE.Vector3();
-          cam.getWorldDirection(direction);
-          
-          this.el.setAttribute('position', {
-            x: direction.x * -6, 
-            y: 1.6 + (direction.y * 6), 
-            z: -2 
-          });
+          let pos = this.el.getAttribute('position');
+          pos.z -= this.data.speed; // Προχωράμε βαθύτερα στον άξονα Z (αρνητικό)
+          this.el.setAttribute('position', pos);
         }
       });
 
       /* ========================================================
-         2. ΜΗΧΑΝΗ ΦΥΣΙΚΗΣ ΤΗΣ ΜΠΑΛΑΣ (Custom Physics - Revised)
-         *ADDRESSES CONTROL AND LOSE CONDITION*
+         2. ΣΥΣΤΗΜΑ ΣΤΟΧΩΝ (Targets & Scoring)
+         Διαχειρίζεται την αλληλεπίδραση και το σκορ.
          ======================================================== */
-      AFRAME.registerComponent('ball-physics', {
-        schema: {
-          initialLives: {type: 'int', default: 3}
-        },
+      let score = 0; // Η μεταβλητή του σκορ ξεκινάει από το 0
+
+      AFRAME.registerComponent('target', {
         init: function () {
-          this.velocity = {x: 0.04, y: 0.04, z: -0.09}; // Λίγο πιο αργή μπάλα για έλεγχο
-          this.currentLives = this.data.initialLives;
-          this.gameOver = false;
-          this.lifeText = document.querySelector('#life-counter');
-          this.gameOverText = document.querySelector('#game-over-text');
-          this.updateLifeDisplay();
-        },
-        updateLifeDisplay: function () {
-          this.lifeText.setAttribute('value', 'Lives: ' + this.currentLives);
-        },
-        triggerGameOver: function () {
-          this.gameOver = true;
-          this.velocity = {x: 0, y: 0, z: 0}; // Σταμάτημα μπάλας
-          this.gameOverText.setAttribute('visible', true);
-        },
-        resetBall: function() {
-           let pos = this.el.getAttribute('position');
-           pos.x = 0; pos.y = 2; pos.z = -5; // Reset στο κέντρο
-           this.el.setAttribute('position', pos);
-           this.velocity = {x: 0.04, y: 0.04, z: -0.09}; // Reset ταχύτητας
-        },
-        tick: function () {
-          if (this.gameOver) return; // Σταματάμε αν τελείωσε το παιχνίδι
-
-          let pos = this.el.getAttribute('position');
+          let el = this.el;
           
-          pos.x += this.velocity.x;
-          pos.y += this.velocity.y;
-          pos.z += this.velocity.z;
+          // ΤΙ ΓΙΝΕΤΑΙ ΟΤΑΝ ΤΟΝ ΚΟΙΤΑΜΕ (Hover)
+          el.addEventListener('mouseenter', function () {
+            el.setAttribute('color', '#ff0044'); // Γίνεται κόκκινος
+            el.setAttribute('scale', '1.2 1.2 1.2'); // Μεγαλώνει λίγο
+          });
 
-          // ΑΝΑΠΗΔΗΣΕΙΣ ΣΤΟ ΤΟΥΝΕΛ
-          if (pos.x > 4 || pos.x < -4) this.velocity.x *= -1;
-          if (pos.y > 6 || pos.y < 0.2) this.velocity.y *= -1;
-          if (pos.z < -15) this.velocity.z *= -1;
+          // ΤΙ ΓΙΝΕΤΑΙ ΟΤΑΝ ΠΑΙΡΝΟΥΜΕ ΤΟ ΒΛΕΜΜΑ ΜΑΣ (Mouse leave)
+          el.addEventListener('mouseleave', function () {
+            el.setAttribute('color', '#00ffaa'); // Επιστρέφει στο αρχικό πράσινο
+            el.setAttribute('scale', '1 1 1');
+          });
 
-          // ΑΝΑΠΗΔΗΣΗ ΣΤΗ ΡΑΚΕΤΑ
-          let paddlePos = document.querySelector('#paddle').getAttribute('position');
-          if (pos.z > -2.2 && pos.z < -1.8) {
-            if (Math.abs(pos.x - paddlePos.x) < 1.5 && Math.abs(pos.y - paddlePos.y) < 1.0) {
-              this.velocity.z *= -1;
-              
-              // ΒΕΛΤΙΩΣΗ ΕΛΕΓΧΟΥ: Μείωση του πολλαπλασιαστή φάλτσου σε 0.015 (από 0.05)
-              // Τώρα η γωνία αναπήδησης είναι πιο subtle
-              this.velocity.x += (pos.x - paddlePos.x) * 0.015;
-              this.velocity.y += (pos.y - paddlePos.y) * 0.015;
-            }
-          }
-
-          // ΣΥΝΘΗΚΗ ΗΤΤΑΣ (GAME OVER)
-          if (pos.z > 1) { // Η μπάλα πέρασε πίσω από τον παίκτη
-            this.currentLives--;
-            this.updateLifeDisplay();
+          // ΤΙ ΓΙΝΕΤΑΙ ΟΤΑΝ "ΠΥΡΟΒΟΛΑΜΕ" (Click/Fuse)
+          el.addEventListener('click', function () {
+            score += 10; // Προσθέτουμε 10 πόντους
+            document.querySelector('#score-text').setAttribute('value', 'Score: ' + score);
             
-            if (this.currentLives <= 0) {
-              this.triggerGameOver();
-            } else {
-              this.resetBall(); // Απλό reset αν έχουμε κι άλλες ζωές
-            }
-          }
-
-          // ΣΥΓΚΡΟΥΣΗ ΜΕ ΤΟΥΒΛΑ
-          let bricks = document.querySelectorAll('.brick');
-          for (let i = 0; i < bricks.length; i++) {
-            let brick = bricks[i];
-            let bPos = brick.getAttribute('position');
-            let dx = pos.x - bPos.x;
-            let dy = pos.y - bPos.y;
-            let dz = pos.z - bPos.z;
-            let distance = Math.sqrt(dx*dx + dy*dy + dz*dz);
-
-            if (distance < 1.0) {
-              this.velocity.z *= -1;
-              brick.parentNode.removeChild(brick);
-              break; 
-            }
-          }
-          this.el.setAttribute('position', pos);
+            // Καταστρέφουμε τον στόχο
+            el.parentNode.removeChild(el);
+          });
         }
       });
     </script>
   </head>
   <body>
-    <a-scene background="color: #0d0d1a">
+    <a-scene background="color: #050510">
       
-      <a-camera id="player" position="0 1.6 0" look-controls="pointerLockEnabled: true" wasd-controls="enabled: false" camera="fov: 100"></a-camera>
+      <a-entity id="rig" position="0 0 0" rail-mover>
+        
+        <a-camera position="0 1.6 0" look-controls wasd-controls="enabled: false">
+          
+          <a-entity cursor="fuse: true; fuseTimeout: 800"
+                    raycaster="objects: .clickable"
+                    position="0 0 -1"
+                    geometry="primitive: ring; radiusInner: 0.02; radiusOuter: 0.03"
+                    material="color: white; shader: flat"
+                    animation__fusing="property: scale; startEvents: fusing; easing: easeInCubic; dur: 800; from: 1 1 1; to: 0.1 0.1 0.1"
+                    animation__mouseleave="property: scale; startEvents: mouseleave; easing: easeInCubic; dur: 100; to: 1 1 1">
+          </a-entity>
+          
+          <a-text id="score-text" value="Score: 0" position="-0.8 0.8 -1.5" color="#00ffff" width="3" font="monoid"></a-text>
+        </a-camera>
 
-      <a-box id="paddle" width="2" height="1" depth="0.2" color="#00ffff" opacity="0.7" wireframe="true" gaze-paddle></a-box>
+      </a-entity>
 
-      <a-sphere id="ball" position="0 2 -5" radius="0.3" color="#ff00ff" ball-physics></a-sphere>
-
-      <a-plane position="0 0 -7.5" rotation="-90 0 0" width="10" height="15" color="#1a1a2a" wireframe="true"></a-plane>
-      <a-box position="-4.5 3 -7.5" width="0.5" height="6" depth="15" color="#2a2a3a"></a-box>
-      <a-box position="4.5 3 -7.5" width="0.5" height="6" depth="15" color="#2a2a3a"></a-box>
-      <a-box position="0 6 -7.5" width="10" height="0.5" depth="15" color="#2a2a3a"></a-box>
-      <a-box position="0 3 -15.5" width="10" height="6" depth="0.5" color="#00ffaa" wireframe="true"></a-box>
-
-      <a-text id="life-counter" value="Lives: 3" position="-4.5 5.5 -15" color="#fff" width="12" align="center"></a-text>
+      <a-plane position="0 0 -100" rotation="-90 0 0" width="40" height="400" color="#111" wireframe="true"></a-plane>
       
-      <a-text id="game-over-text" value="GAME OVER" visible="false" position="0 3 -10" color="#ff0000" width="25" align="center" scale="2 2 2"></a-text>
+      <a-entity id="targets">
+        <a-sphere class="clickable" target position="-3 2 -20" radius="0.8" color="#00ffaa"></a-sphere>
+        <a-sphere class="clickable" target position="3 4 -30" radius="0.8" color="#00ffaa"></a-sphere>
+        
+        <a-sphere class="clickable" target position="0 6 -50" radius="0.8" color="#00ffaa"></a-sphere>
+        <a-sphere class="clickable" target position="-5 1 -60" radius="0.8" color="#00ffaa"></a-sphere>
+        <a-sphere class="clickable" target position="5 3 -70" radius="0.8" color="#00ffaa"></a-sphere>
 
-      <a-entity id="brick-wall" position="0 0 0">
-        <a-box class="brick" position="-2 2 -12" width="1.5" height="0.8" depth="0.5" color="#ff3366"></a-box>
-        <a-box class="brick" position="0 2 -12" width="1.5" height="0.8" depth="0.5" color="#ff3366"></a-box>
-        <a-box class="brick" position="2 2 -12" width="1.5" height="0.8" depth="0.5" color="#ff3366"></a-box>
-
-        <a-box class="brick" position="-2 3 -12" width="1.5" height="0.8" depth="0.5" color="#ffaa00"></a-box>
-        <a-box class="brick" position="0 3 -12" width="1.5" height="0.8" depth="0.5" color="#ffaa00"></a-box>
-        <a-box class="brick" position="2 3 -12" width="1.5" height="0.8" depth="0.5" color="#ffaa00"></a-box>
-
-        <a-box class="brick" position="-2 4 -12" width="1.5" height="0.8" depth="0.5" color="#00ffaa"></a-box>
-        <a-box class="brick" position="0 4 -12" width="1.5" height="0.8" depth="0.5" color="#00ffaa"></a-box>
-        <a-box class="brick" position="2 4 -12" width="1.5" height="0.8" depth="0.5" color="#00ffaa"></a-box>
+        <a-sphere class="clickable" target position="-4 5 -90" radius="0.8" color="#00ffaa"></a-sphere>
+        <a-sphere class="clickable" target position="4 1 -100" radius="0.8" color="#00ffaa"></a-sphere>
+        <a-sphere class="clickable" target position="0 4 -120" radius="0.8" color="#00ffaa"></a-sphere>
       </a-entity>
 
     </a-scene>

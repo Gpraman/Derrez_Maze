@@ -2,25 +2,77 @@
 <html lang="el">
   <head>
     <meta charset="utf-8">
-    <title>Μη Ευκλείδειος Λαβύρινθος - VR II</title>
+    <title>Non-Euclidean VR Illusion</title>
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+
+    <script>
+      AFRAME.registerComponent('portal', {
+        schema: {
+          destination: {type: 'string'} // Το ID του σημείου που θα πάει ο παίκτης
+        },
+        init: function () {
+          // Βρίσκουμε τον παίκτη (την κάμερα) στον κόσμο
+          this.player = document.querySelector('#player');
+          this.isTeleporting = false;
+        },
+        tick: function () {
+          if (this.isTeleporting) return;
+
+          // Υπολογίζουμε την απόσταση του παίκτη από το Portal
+          let playerPos = this.player.getAttribute('position');
+          let portalPos = this.el.getAttribute('position');
+          
+          let dx = playerPos.x - portalPos.x;
+          let dz = playerPos.z - portalPos.z;
+          let distance = Math.sqrt(dx * dx + dz * dz); // Πυθαγόρειο Θεώρημα
+
+          // Αν ο παίκτης πλησιάσει στο 1 μέτρο, ενεργοποιείται!
+          if (distance < 1.0) {
+            this.isTeleporting = true;
+            let destElement = document.querySelector(this.data.destination);
+            let destPos = destElement.getAttribute('position');
+            
+            // Τηλεμεταφορά του παίκτη στις νέες συντεταγμένες
+            this.player.setAttribute('position', {x: destPos.x, y: playerPos.y, z: destPos.z});
+            
+            // Βάζουμε ένα μικρό cooldown για να μην κολλήσει σε λούπα
+            setTimeout(() => { this.isTeleporting = false; }, 1000);
+          }
+        }
+      });
+    </script>
   </head>
   <body>
     <a-scene>
       
-      <a-sky color="#0d0d0d"></a-sky> <a-plane position="0 0 0" rotation="-90 0 0" width="30" height="30" color="#1a1a1a"></a-plane> <a-light type="ambient" color="#444"></a-light>
-      <a-light type="point" position="0 3 0" color="#ffffff" intensity="0.8"></a-light>
-
-      <a-box position="0 1.5 -4" width="8" height="3" depth="0.5" color="#4CC3D9"></a-box>
+      <a-sky color="#f2f2f2"></a-sky>
+      <a-plane position="0 0 0" rotation="-90 0 0" width="200" height="200" color="#ffffff" shadow="receive: true"></a-plane>
       
-      <a-box position="-4 1.5 -0.5" width="0.5" height="3" depth="7" color="#EF2D5E"></a-box>
-      
-      <a-box position="4 1.5 -0.5" width="0.5" height="3" depth="7" color="#FFC65D"></a-box>
+      <a-entity id="player" position="0 1.6 4">
+        <a-camera look-controls wasd-controls="acceleration: 10"></a-camera>
+      </a-entity>
 
-      <a-box position="-1.5 1.5 -1.5" width="4" height="3" depth="0.5" color="#7BC8A4"></a-box>
+      <a-entity id="area1" position="0 0 0">
+        <a-box position="-2 1.5 0" width="0.5" height="3" depth="10" color="#222"></a-box>
+        <a-box position="2 1.5 0" width="0.5" height="3" depth="10" color="#222"></a-box>
+        <a-box position="0 1.5 5" width="4" height="3" depth="0.5" color="#222"></a-box>
+        
+        <a-box position="0 1.5 -4" width="3.5" height="3" depth="0.5" color="#ff0044" opacity="0.8" portal="destination: #spawn2">
+          <a-text value="Walk Through" align="center" position="0 2 0.5" color="#000"></a-text>
+        </a-box>
+        
+        <a-entity id="spawn1" position="0 0 2"></a-entity>
+      </a-entity>
 
-      <a-entity position="0 1.6 3">
-        <a-camera look-controls wasd-controls></a-camera>
+
+      <a-entity id="area2" position="100 0 100">
+        <a-entity id="spawn2" position="100 0 104"></a-entity>
+
+        <a-box position="100 1.5 100" width="10" height="3" depth="10" color="#00aaff" wireframe="true"></a-box>
+        
+        <a-box position="100 1.5 96" width="3.5" height="3" depth="0.5" color="#00ff88" opacity="0.8" portal="destination: #spawn1">
+          <a-text value="Loop Back" align="center" position="0 2 0.5" color="#000"></a-text>
+        </a-box>
       </a-entity>
 
     </a-scene>

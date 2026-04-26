@@ -2,43 +2,81 @@
 <html lang="el">
   <head>
     <meta charset="utf-8">
-    <title>Μη Ευκλείδειος Λαβύρινθος - VR</title>
+    <title>Maze to Garden - VR Experience</title>
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
 
     <script>
+      /* ========================================================
+         1. ΣΥΣΤΗΜΑ ΣΥΓΚΡΟΥΣΕΩΝ (WALL COLLIDER)
+         Αποτρέπει τον παίκτη από το να περνάει μέσα από τοίχους.
+         ======================================================== */
+      AFRAME.registerComponent('wall-collider', {
+        tick: function () {
+          let el = this.el;
+          let pos = el.getAttribute('position');
+          let radius = 0.5; // Ο όγκος (ακτίνα) του παίκτη
+
+          // Βρίσκουμε όλα τα αντικείμενα που έχουν την κλάση "wall"
+          let walls = document.querySelectorAll('.wall');
+
+          walls.forEach(wall => {
+            let wPos = wall.getAttribute('position');
+            let wWidth = parseFloat(wall.getAttribute('width')) || 1;
+            let wDepth = parseFloat(wall.getAttribute('depth')) || 1;
+
+            // Υπολογισμός των ορίων του τοίχου + την ακτίνα του παίκτη
+            let minX = wPos.x - (wWidth / 2) - radius;
+            let maxX = wPos.x + (wWidth / 2) + radius;
+            let minZ = wPos.z - (wDepth / 2) - radius;
+            let maxZ = wPos.z + (wDepth / 2) + radius;
+
+            // Αν ο παίκτης μπει μέσα σε αυτά τα όρια (Σύγκρουση!)
+            if (pos.x > minX && pos.x < maxX && pos.z > minZ && pos.z < maxZ) {
+              // Βρίσκουμε από ποια πλευρά είναι πιο κοντά για να τον σπρώξουμε έξω
+              let distToMinX = Math.abs(pos.x - minX);
+              let distToMaxX = Math.abs(pos.x - maxX);
+              let distToMinZ = Math.abs(pos.z - minZ);
+              let distToMaxZ = Math.abs(pos.z - maxZ);
+              let minDist = Math.min(distToMinX, distToMaxX, distToMinZ, distToMaxZ);
+
+              // Διόρθωση θέσης
+              if (minDist === distToMinX) pos.x = minX;
+              if (minDist === distToMaxX) pos.x = maxX;
+              if (minDist === distToMinZ) pos.z = minZ;
+              if (minDist === distToMaxZ) pos.z = maxZ;
+
+              el.setAttribute('position', pos);
+            }
+          });
+        }
+      });
+
+      /* ========================================================
+         2. ΣΥΣΤΗΜΑ PORTAL (ΤΗΛΕΜΕΤΑΦΟΡΑ)
+         ======================================================== */
       AFRAME.registerComponent('portal', {
-        schema: {
-          destination: {type: 'string'} // Το ID του σημείου που θα τηλεμεταφερθεί ο παίκτης
-        },
+        schema: { destination: {type: 'string'} },
         init: function () {
-          // Εντοπίζουμε τον παίκτη στον 3D χώρο
           this.player = document.querySelector('#player');
           this.isTeleporting = false;
         },
         tick: function () {
-          // Αν ήδη τηλεμεταφέρεται, σταματάμε για να μην κολλήσει
           if (this.isTeleporting) return;
 
-          // Υπολογισμός απόστασης (Παίκτης <--> Πύλη)
           let playerPos = this.player.getAttribute('position');
           let portalPos = this.el.getAttribute('position');
           
           let dx = playerPos.x - portalPos.x;
           let dz = playerPos.z - portalPos.z;
-          let distance = Math.sqrt(dx * dx + dz * dz); // Πυθαγόρειο Θεώρημα
+          let distance = Math.sqrt(dx * dx + dz * dz);
 
-          // Όριο Ενεργοποίησης: 1 μέτρο
-          if (distance < 1.0) {
+          // Αν πλησιάσει στο 1.2 μέτρα, τηλεμεταφέρεται
+          if (distance < 1.2) {
             this.isTeleporting = true;
+            let destPos = document.querySelector(this.data.destination).getAttribute('position');
             
-            // Βρίσκουμε τις συντεταγμένες του προορισμού
-            let destElement = document.querySelector(this.data.destination);
-            let destPos = destElement.getAttribute('position');
-            
-            // Τηλεμεταφορά του παίκτη
             this.player.setAttribute('position', {x: destPos.x, y: playerPos.y, z: destPos.z});
             
-            // Cooldown 1 δευτερολέπτου για να μην εγκλωβιστεί σε λούπα
             setTimeout(() => { this.isTeleporting = false; }, 1000);
           }
         }
@@ -46,34 +84,60 @@
     </script>
   </head>
   <body>
-    <a-scene>
+    <a-scene background="color: #050505">
       
-      <a-sky color="#f2f2f2"></a-sky>
-      <a-plane position="0 0 0" rotation="-90 0 0" width="200" height="200" color="#ffffff"></a-plane>
-      
-      <a-camera id="player" position="0 1.6 4" look-controls wasd-controls="acceleration: 15"></a-camera>
+      <a-camera id="player" position="0 1.6 0" look-controls wasd-controls="acceleration: 15" wall-collider></a-camera>
 
-      <a-entity id="area1" position="0 0 0">
-        <a-box position="-2 1.5 0" width="0.5" height="3" depth="10" color="#222"></a-box>
-        <a-box position="2 1.5 0" width="0.5" height="3" depth="10" color="#222"></a-box>
-        <a-box position="0 1.5 5" width="4" height="3" depth="0.5" color="#222"></a-box>
+      <a-entity id="maze-environment">
+        <a-plane position="0 0 0" rotation="-90 0 0" width="200" height="200" color="#111"></a-plane>
+
+        <a-box class="wall" position="-2 1.5 0" width="0.5" height="4" depth="15" color="#333"></a-box>
+        <a-box class="wall" position="2 1.5 0" width="0.5" height="4" depth="15" color="#333"></a-box>
+        <a-box class="wall" position="0 1.5 7.5" width="4.5" height="4" depth="0.5" color="#333"></a-box> <a-box class="wall" position="-6 1.5 -7.5" width="8" height="4" depth="0.5" color="#333"></a-box>
+        <a-box class="wall" position="-10 1.5 -12" width="0.5" height="4" depth="9" color="#333"></a-box>
+        <a-box class="wall" position="-2 1.5 -12" width="0.5" height="4" depth="9" color="#333"></a-box>
         
-        <a-box position="0 1.5 -4" width="3.5" height="3" depth="0.5" color="#ff0044" opacity="0.8" portal="destination: #spawn2">
-          <a-text value="Walk Through" align="center" position="0 2 0.5" color="#000"></a-text>
+        <a-box class="wall" position="6 1.5 -7.5" width="8" height="4" depth="0.5" color="#333"></a-box>
+        <a-box class="wall" position="10 1.5 -12" width="0.5" height="4" depth="9" color="#333"></a-box>
+
+        <a-box position="-6 1.5 -16" width="3" height="3" depth="0.2" color="#aa00ff" opacity="0.7" portal="destination: #spawn-point-B">
+          <a-text value="?" align="center" position="0 2 0.3" color="#fff"></a-text>
         </a-box>
+
+        <a-entity id="spawn-point-B" position="50 0 50"></a-entity>
         
-        <a-entity id="spawn1" position="0 0 2"></a-entity>
+        <a-box class="wall" position="50 1.5 45" width="10" height="4" depth="0.5" color="#442222"></a-box>
+        <a-box class="wall" position="45 1.5 50" width="0.5" height="4" depth="10" color="#442222"></a-box>
+        <a-box class="wall" position="55 1.5 50" width="0.5" height="4" depth="10" color="#442222"></a-box>
+
+        <a-box position="50 1.5 54" width="3" height="3" depth="0.2" color="#00ffaa" opacity="0.8" portal="destination: #garden-spawn">
+          <a-text value="EXIT" align="center" position="0 2 0.3" color="#000"></a-text>
+        </a-box>
       </a-entity>
 
+      <a-entity id="garden-environment" position="500 0 500">
+        <a-entity id="garden-spawn" position="500 0 505"></a-entity>
 
-      <a-entity id="area2" position="100 0 100">
-        <a-entity id="spawn2" position="100 0 104"></a-entity>
+        <a-sphere position="500 0 500" radius="50" color="#87CEEB" material="side: back"></a-sphere>
 
-        <a-box position="100 1.5 100" width="10" height="3" depth="10" color="#00aaff" wireframe="true"></a-box>
+        <a-plane position="500 0.01 500" rotation="-90 0 0" width="100" height="100" color="#7CFC00"></a-plane>
+
+        <a-entity position="500 0 490">
+          <a-cylinder position="0 1 0" radius="0.4" height="2" color="#8B4513"></a-cylinder>
+          <a-sphere position="0 3 0" radius="2" color="#228B22"></a-sphere>
+        </a-entity>
+
+        <a-entity position="495 0 495">
+          <a-cylinder position="0 1 0" radius="0.3" height="2" color="#8B4513"></a-cylinder>
+          <a-sphere position="0 2.5 0" radius="1.5" color="#228B22"></a-sphere>
+        </a-entity>
         
-        <a-box position="100 1.5 96" width="3.5" height="3" depth="0.5" color="#00ff88" opacity="0.8" portal="destination: #spawn1">
-          <a-text value="Loop Back" align="center" position="0 2 0.5" color="#000"></a-text>
-        </a-box>
+        <a-entity position="506 0 492">
+          <a-cylinder position="0 1.5 0" radius="0.5" height="3" color="#8B4513"></a-cylinder>
+          <a-sphere position="0 4 0" radius="2.5" color="#228B22"></a-sphere>
+        </a-entity>
+
+        <a-text value="You Escaped!" align="center" position="500 2 502" scale="2 2 2" color="#000"></a-text>
       </a-entity>
 
     </a-scene>

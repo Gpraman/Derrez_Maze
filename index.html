@@ -2,23 +2,24 @@
 <html lang="el">
   <head>
     <meta charset="utf-8">
-    <title>Non-Euclidean VR Illusion</title>
+    <title>Μη Ευκλείδειος Λαβύρινθος - VR</title>
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
 
     <script>
       AFRAME.registerComponent('portal', {
         schema: {
-          destination: {type: 'string'} // Το ID του σημείου που θα πάει ο παίκτης
+          destination: {type: 'string'} // Το ID του σημείου που θα τηλεμεταφερθεί ο παίκτης
         },
         init: function () {
-          // Βρίσκουμε τον παίκτη (την κάμερα) στον κόσμο
+          // Εντοπίζουμε τον παίκτη στον 3D χώρο
           this.player = document.querySelector('#player');
           this.isTeleporting = false;
         },
         tick: function () {
+          // Αν ήδη τηλεμεταφέρεται, σταματάμε για να μην κολλήσει
           if (this.isTeleporting) return;
 
-          // Υπολογίζουμε την απόσταση του παίκτη από το Portal
+          // Υπολογισμός απόστασης (Παίκτης <--> Πύλη)
           let playerPos = this.player.getAttribute('position');
           let portalPos = this.el.getAttribute('position');
           
@@ -26,16 +27,18 @@
           let dz = playerPos.z - portalPos.z;
           let distance = Math.sqrt(dx * dx + dz * dz); // Πυθαγόρειο Θεώρημα
 
-          // Αν ο παίκτης πλησιάσει στο 1 μέτρο, ενεργοποιείται!
+          // Όριο Ενεργοποίησης: 1 μέτρο
           if (distance < 1.0) {
             this.isTeleporting = true;
+            
+            // Βρίσκουμε τις συντεταγμένες του προορισμού
             let destElement = document.querySelector(this.data.destination);
             let destPos = destElement.getAttribute('position');
             
-            // Τηλεμεταφορά του παίκτη στις νέες συντεταγμένες
+            // Τηλεμεταφορά του παίκτη
             this.player.setAttribute('position', {x: destPos.x, y: playerPos.y, z: destPos.z});
             
-            // Βάζουμε ένα μικρό cooldown για να μην κολλήσει σε λούπα
+            // Cooldown 1 δευτερολέπτου για να μην εγκλωβιστεί σε λούπα
             setTimeout(() => { this.isTeleporting = false; }, 1000);
           }
         }
@@ -46,11 +49,9 @@
     <a-scene>
       
       <a-sky color="#f2f2f2"></a-sky>
-      <a-plane position="0 0 0" rotation="-90 0 0" width="200" height="200" color="#ffffff" shadow="receive: true"></a-plane>
+      <a-plane position="0 0 0" rotation="-90 0 0" width="200" height="200" color="#ffffff"></a-plane>
       
-      <a-entity id="player" position="0 1.6 4">
-        <a-camera look-controls wasd-controls="acceleration: 10"></a-camera>
-      </a-entity>
+      <a-camera id="player" position="0 1.6 4" look-controls wasd-controls="acceleration: 15"></a-camera>
 
       <a-entity id="area1" position="0 0 0">
         <a-box position="-2 1.5 0" width="0.5" height="3" depth="10" color="#222"></a-box>

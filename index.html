@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>Castle Crusher VR (v2) | Digital Arts Project</title>
+    <title>Castle Crusher VR (Fixed v3) | Digital Arts Project</title>
     <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-physics-system@v4.2.2/dist/aframe-physics-system.min.js"></script>
     
@@ -18,12 +18,11 @@
         schema: { level: {type: 'number', default: 1} },
         
         init: function () {
-          this.blocks = [];
           this.build();
         },
 
         // Βοηθητική συνάρτηση για τη δημιουργία ενός δομικού λίθου
-        createBlock: function(position, size, isTower, isDynamic) {
+        createBlock: function(container, position, size, mass, color, isTower) {
           const block = document.createElement('a-box');
           block.setAttribute('position', position);
           block.setAttribute('width', size.w);
@@ -34,20 +33,16 @@
           block.setAttribute('material', {
             src: 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@master/examples/textures/brick_diffuse.jpg',
             repeat: `${size.w} ${size.h}`,
-            color: isTower ? '#888' : '#aaa'
+            color: color
           });
           
-          if (isDynamic) {
-            // Δυναμικό σώμα για να πέφτει. Αυξάνουμε mass & friction για ευστάθεια
-            const mass = 5 + (this.data.level * 2);
-            block.setAttribute('dynamic-body', `mass: ${mass}; friction: 0.8; restitution: 0.1`);
-            block.setAttribute('class', 'castle-block');
-          } else {
-            // Στατικό σώμα (θεμέλια)
-            block.setAttribute('static-body', '');
-          }
+          // Δυναμικό σώμα
+          // Αυξάνουμε mass & friction για ευστάθεια
+          block.setAttribute('dynamic-body', `mass: ${mass}; friction: 1.0; restitution: 0.1`);
+          block.setAttribute('class', 'castle-block');
+          if(isTower) block.classList.add('tower');
 
-          this.el.appendChild(block);
+          container.appendChild(block);
         },
 
         build: function() {
@@ -55,54 +50,61 @@
           const container = this.el;
           
           // Διάσταση κάστρου ανάλογα με το Level
-          const baseSize = 5 + (level * 1.5);
-          const castleDepth = -15; // Απόσταση από τον παίκτη
+          const baseSize = 6 + (level * 1.0);
+          const castleDepth = -18; // Απόσταση από τον παίκτη
+          const floorY = 0.5; // Το ύψος της στατικής βάσης
 
           // 1. ΘΕΜΕΛΙΑ (Στατικά - δεν πέφτουν)
-          this.createBlock({x: 0, y: 0.25, z: castleDepth}, {w: baseSize, h: 0.5, d: baseSize}, false, false);
+          const base = document.createElement('a-box');
+          base.setAttribute('position', `0 ${floorY / 2} ${castleDepth}`);
+          base.setAttribute('width', baseSize);
+          base.setAttribute('height', floorY);
+          base.setAttribute('depth', baseSize);
+          base.setAttribute('color', '#444');
+          base.setAttribute('static-body', '');
+          container.appendChild(base);
 
           // 2. ΠΥΡΓΟΙ (Στις 4 γωνίες) - Δυναμικοί αλλά βαριοί
-          const towerSize = {w: 1.5, h: 4 + (level * 0.5), d: 1.5};
-          const towerMass = 100 + (level * 20); // Πολύ βαρύ
-          const towerOffset = (baseSize / 2) - 0.75;
+          const towerSize = {w: 1.8, h: 5 + (level * 0.4), d: 1.8};
+          const towerMass = 150 + (level * 25); // Πολύ βαρύ
+          const towerOffset = (baseSize / 2) - 0.9;
+          const towerColor = '#777';
+          
           const towerPositions = [
-            {x: -towerOffset, y: towerSize.h/2 + 0.5, z: castleDepth - towerOffset},
-            {x: towerOffset, y: towerSize.h/2 + 0.5, z: castleDepth - towerOffset},
-            {x: -towerOffset, y: towerSize.h/2 + 0.5, z: castleDepth + towerOffset},
-            {x: towerOffset, y: towerSize.h/2 + 0.5, z: castleDepth + towerOffset}
+            {x: -towerOffset, z: castleDepth - towerOffset},
+            {x: towerOffset, z: castleDepth - towerOffset},
+            {x: -towerOffset, z: castleDepth + towerOffset},
+            {x: towerOffset, z: castleDepth + towerOffset}
           ];
 
           towerPositions.forEach(pos => {
-            const tower = document.createElement('a-box');
-            tower.setAttribute('position', pos);
-            tower.setAttribute('width', towerSize.w);
-            tower.setAttribute('height', towerSize.h);
-            tower.setAttribute('depth', towerSize.d);
-            tower.setAttribute('material', {
-                src: 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@master/examples/textures/brick_diffuse.jpg',
-                repeat: '1.5 4',
-                color: '#666'
-            });
-            tower.setAttribute('dynamic-body', `mass: ${towerMass}; friction: 1; restitution: 0`);
-            tower.setAttribute('class', 'castle-block tower');
-            container.appendChild(tower);
+            this.createBlock(container, `${pos.x} ${towerSize.h/2 + floorY} ${pos.z}`, towerSize, towerMass, towerColor, true);
           });
 
           // 3. ΤΕΙΧΗ (Ανάμεσα στους πύργους) - Πιο εύθραυστα
-          const wallThick = 0.6;
-          const wallHeight = towerSize.h - 1;
-          const wallLen = baseSize - (towerSize.w * 2);
+          const wallThick = 0.8;
+          const wallHeight = towerSize.h - 1.2;
+          const wallLen = baseSize - (towerSize.w * 2) + 0.2;
+          const wallMass = 15 + (level * 5);
+          const wallColor = '#aaa';
           
           // Πίσω τείχος (facing player)
-          this.createBlock({x: 0, y: wallHeight/2 + 0.5, z: castleDepth - towerOffset}, {w: wallLen, h: wallHeight, d: wallThick}, false, true);
+          this.createBlock(container, `0 ${wallHeight/2 + floorY} ${castleDepth - towerOffset}`, {w: wallLen, h: wallHeight, d: wallThick}, wallMass, wallColor, false);
           // Πλάγια τείχη
-          this.createBlock({x: -towerOffset, y: wallHeight/2 + 0.5, z: castleDepth}, {w: wallThick, h: wallHeight, d: wallLen}, false, true);
-          this.createBlock({x: towerOffset, y: wallHeight/2 + 0.5, z: castleDepth}, {w: wallThick, h: wallHeight, d: wallLen}, false, true);
+          this.createBlock(container, `${-towerOffset} ${wallHeight/2 + floorY} 0`, {w: wallThick, h: wallHeight, d: wallLen}, wallMass, wallColor, false);
+          this.createBlock(container, `${towerOffset} ${wallHeight/2 + floorY} 0`, {w: wallThick, h: wallHeight, d: wallLen}, wallMass, wallColor, false);
+          // Πλάγια τείχη χρειάζονται διόρθωση θέσης relative to castleDepth
+          container.querySelectorAll('.castle-block:not(.tower)').forEach(b => {
+             if(b.getAttribute('position').z == '0') {
+                let pos = b.getAttribute('position');
+                b.setAttribute('position', `${pos.x} ${pos.y} ${castleDepth}`);
+             }
+          });
 
           // 4. ΠΟΛΕΜΙΣΤΡΕΣ (Crenellations) πάνω στα τείχη - Πέφτουν εύκολα
-          for (let i=0; i < wallLen; i+=1.2) {
+          for (let i=0; i < wallLen; i+=1.4) {
             // Πίσω πολεμίστρες
-            this.createBlock({x: i - wallLen/2 + 0.6, y: wallHeight + 0.9, z: castleDepth - towerOffset}, {w: 0.6, h: 0.6, d: 0.6}, false, true);
+            this.createBlock(container, `${i - wallLen/2 + 0.7} ${wallHeight + 0.4 + floorY} ${castleDepth - towerOffset}`, {w: 0.7, h: 0.8, d: 0.7}, 5, '#888', false);
           }
         }
       });
@@ -147,34 +149,34 @@
           }, 1000);
         },
 
+        // --- Η ΔΙΟΡΘΩΜΕΝΗ ΣΥΝΑΡΤΗΣΗ ΕΚΤΟΞΕΥΣΗΣ ---
         launchProjectile: function () {
-          // Δημιουργούμε νέα σφαίρα σε κάθε κλικ για να αποφύγουμε bugs
           const scene = this.el.sceneEl;
           const ball = document.createElement('a-sphere');
           
-          // Θέση εκτόξευσης (μπροστά από τον παίκτη, ελαφρώς δεξιά)
-          ball.setAttribute('position', '0.5 1.5 -2');
-          ball.setAttribute('radius', '0.4');
-          ball.setAttribute('color', '#333');
-          ball.setAttribute('material', 'src: https://cdn.jsdelivr.net/gh/mrdoob/three.js@master/examples/textures/lava/lavatile.jpg');
+          // Θέση εκτόξευσης: Λίγο πιο μπροστά (-3) για να μην χτυπάει την κάμερα
+          ball.setAttribute('position', '0.2 1.5 -3');
+          ball.setAttribute('radius', '0.5');
+          ball.setAttribute('material', 'src: https://cdn.jsdelivr.net/gh/mrdoob/three.js@master/examples/textures/lava/lavatile.jpg; color: #cc6600');
           
           // Βαριά μπάλα
-          ball.setAttribute('dynamic-body', 'mass: 50; friction: 0.1; restitution: 0.5');
+          ball.setAttribute('dynamic-body', 'mass: 80; friction: 0.01; restitution: 0.6');
           
           scene.appendChild(ball);
 
-          // Εφαρμογή ώθησης αφού φορτωθεί το body
+          // --- Η Κρίσιμη Αλλαγή ---
+          // Αντί για applyImpulse, χρησιμοποιούμε setAttribute('velocity')
+          // Μόλις το σώμα φορτωθεί, του δίνουμε ταχύτητα
           ball.addEventListener('body-loaded', function () {
-            // Δύναμη: Πολύ μπροστά (-Z), λίγο πάνω (+Y)
-            const force = new CANNON.Vec3(0, 15, -150); 
-            const center = new CANNON.Vec3(0, 0, 0);
-            ball.body.applyImpulse(force, center);
+            // Velocity Vector: (X, Y, Z)
+            // X=0 (ευθεία), Y=8 (λίγο πάνω - τόξο), Z=-120 (πολύ γρήγορα μπροστά)
+            ball.setAttribute('velocity', '0 8 -120'); 
           });
 
-          // Αυτόματη διαγραφή σφαίρας μετά από 5 δευτερόλεπτα για εξοικονόμηση πόρων
+          // Αυτόματη διαγραφή σφαίρας μετά από 6 δευτερόλεπτα
           setTimeout(() => {
             if (ball.parentNode) ball.parentNode.removeChild(ball);
-          }, 5000);
+          }, 6000);
         },
 
         checkWinCondition: function () {
@@ -182,22 +184,22 @@
           let fallenBlocks = 0;
           
           blocks.forEach(b => {
-            // Αν το box έχει πέσει κάτω από το ύψος των θεμελίων (0.5)
-            if (b.object3D.position.y < 0.6) {
+            // Αν το box έχει πέσει κάτω από το ύψος των θεμελίων (0.6)
+            if (b.object3D.position.y < 0.7) {
                 fallenBlocks++;
             }
           });
 
-          // Αν το 70% των *δυναμικών* κομματιών έχει πέσει
-          if (blocks.length > 0 && fallenBlocks > blocks.length * 0.7) {
+          // Αν το 65% των *δυναμικών* κομματιών έχει πέσει
+          if (blocks.length > 0 && fallenBlocks > blocks.length * 0.65) {
             timerActive = false;
             clearInterval(timerInterval);
             if (currentLevel < 10) {
-              alert(`🏆 Το Κάστρο ${currentLevel} έπεσε! Προετοιμασία για το Level ${currentLevel + 1}.`);
+              alert(`🏆🏆🏆 Το Κάστρο ${currentLevel} ισοπεδώθηκε! Ετοιμαστείτε για το Level ${currentLevel + 1}.`);
               currentLevel++;
               this.startLevel();
             } else {
-              alert("🎉 ΣΥΓΧΑΡΗΤΗΡΙΑ! Ισοπεδώσατε και τα 10 κάστρα!");
+              alert("🎉🎉🎉🎉🎉🎉🎉🎉\nΣΥΓΧΑΡΗΤΗΡΙΑ! ΕΙΣΤΕ Ο ΚΥΡΙΑΡΧΟΣ ΤΗΣ ΚΑΤΑΣΤΡΟΦΗΣ!\nΟλοκληρώσατε και τα 10 levels!");
               currentLevel = 1;
               this.startLevel();
             }
@@ -207,7 +209,7 @@
         gameOver: function () {
           timerActive = false;
           clearInterval(timerInterval);
-          alert(`💥 Ο χρόνος τελείωσε! Χάσατε στο Level ${currentLevel}. Επανεκκίνηση.`);
+          alert(`💥💥💥 Ο χρόνος τελείωσε! Το κάστρο ${currentLevel} άντεξε.\nΕπανεκκίνηση από το Level 1.`);
           currentLevel = 1;
           this.startLevel();
         },
@@ -220,7 +222,7 @@
     </script>
   </head>
   <body>
-    <a-scene physics="gravity: -9.8; debug: false; iterations: 10" game-manager>
+    <a-scene physics="gravity: -9.8; debug: false; iterations: 15" game-manager>
       
       <a-assets>
         <img id="groundTex" src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@master/examples/textures/terrain/grasslight-big.jpg">

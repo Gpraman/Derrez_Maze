@@ -2,40 +2,44 @@
 <html lang="el">
   <head>
     <meta charset="utf-8">
-    <title>VR Duck Hunt - Easy Mode</title>
+    <title>VR Duck Hunt - Balanced Edition</title>
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
 
     <script>
       let score = 0;
+      let ammo = 3;
 
       AFRAME.registerComponent('duck-ai', {
         schema: {
-          speed: { type: 'number', default: 0.03 }, // ΠΟΛΥ ΠΙΟ ΑΡΓΟ (ήταν 0.08)
-          lifetime: { type: 'number', default: 8000 } // Ζουν για 8 δευτερόλεπτα
+          speed: { type: 'number', default: 0.05 }, // Μέση ταχύτητα
+          lifetime: { type: 'number', default: 6000 }
         },
         init: function () {
           let el = this.el;
-          // Τυχαία κατεύθυνση αλλά πιο σταθερή
+          // Δυναμική ταχύτητα βάσει σκορ (όσο ανεβαίνει το σκορ, επιταχύνουν)
+          let speedFactor = this.data.speed + (score / 5000); 
+          
           this.direction = new THREE.Vector3(
-            (Math.random() - 0.5) * 1.5, 
-            (Math.random() * 0.3) + 0.05, 
-            (Math.random() - 0.5) * 0.5
+            (Math.random() - 0.5) * 2, 
+            (Math.random() * 0.4) + 0.1, 
+            (Math.random() - 0.5) * 1
           );
-          this.direction.normalize().multiplyScalar(this.data.speed);
+          this.direction.normalize().multiplyScalar(speedFactor);
 
           this.timer = setTimeout(() => {
             if(el.parentNode) el.parentNode.removeChild(el);
+            resetAmmo(); // Reset σφαιρών για την επόμενη πάπια
           }, this.data.lifetime);
 
-          el.addEventListener('mouseenter', () => el.setAttribute('color', '#ff0'));
-          el.addEventListener('mouseleave', () => el.setAttribute('color', '#654321'));
-
           el.addEventListener('click', () => {
-            score += 50;
-            document.querySelector('#score-text').setAttribute('value', 'Score: ' + score);
-            clearTimeout(this.timer);
-            el.setAttribute('animation', 'property: position; to: ' + el.getAttribute('position').x + ' -2 ' + el.getAttribute('position').z + '; dur: 800; easing: easeInQuad');
-            setTimeout(() => { if(el.parentNode) el.parentNode.removeChild(el); }, 800);
+            if (ammo > 0) {
+              score += 50;
+              document.querySelector('#score-text').setAttribute('value', 'Score: ' + score);
+              el.setAttribute('color', '#ff0000'); // Έκρηξη!
+              el.setAttribute('scale', '0.1 0.1 0.1'); // Εξαφάνιση
+              setTimeout(() => { if(el.parentNode) el.parentNode.removeChild(el); }, 100);
+              resetAmmo();
+            }
           });
         },
         tick: function () {
@@ -47,27 +51,33 @@
         }
       });
 
+      function resetAmmo() {
+        ammo = 3;
+        document.querySelector('#ammo-text').setAttribute('value', 'Ammo: ' + ammo);
+      }
+
+      // Σύστημα πυροβολισμού (αφαίρεση σφαίρας όταν κάνεις κλικ οπουδήποτε)
+      window.addEventListener('click', () => {
+        if (ammo > 0) {
+          ammo--;
+          document.querySelector('#ammo-text').setAttribute('value', 'Ammo: ' + ammo);
+        }
+      });
+
       AFRAME.registerComponent('spawner', {
-        schema: { interval: { type: 'number', default: 4000 } }, // Νέα πάπια κάθε 4 δευτερόλεπτα
         init: function () {
-          this.scene = document.querySelector('a-scene');
-          this.timer = setInterval(() => this.spawnDuck(), this.data.interval);
-        },
-        spawnDuck: function () {
-          if(document.querySelectorAll('.duck').length >= 4) return;
-
-          let duck = document.createElement('a-box');
-          duck.setAttribute('class', 'duck clickable');
-          duck.setAttribute('duck-ai', '');
-          // ΜΕΓΑΛΥΤΕΡΟ ΜΕΓΕΘΟΣ (1x1x1 μέτρο) για να είναι εύκολος στόχος
-          duck.setAttribute('width', '1'); duck.setAttribute('height', '0.8'); duck.setAttribute('depth', '1');
-          duck.setAttribute('color', '#654321');
-          
-          let spawnX = (Math.random() - 0.5) * 12;
-          let spawnZ = -12 - (Math.random() * 5);
-          duck.setAttribute('position', {x: spawnX, y: 0.5, z: spawnZ});
-
-          this.scene.appendChild(duck);
+          this.timer = setInterval(() => {
+            if(document.querySelectorAll('.duck').length < 2) {
+                let duck = document.createElement('a-box');
+                duck.setAttribute('class', 'duck clickable');
+                duck.setAttribute('duck-ai', '');
+                duck.setAttribute('width', '0.8'); duck.setAttribute('height', '0.6'); duck.setAttribute('depth', '0.8');
+                duck.setAttribute('color', '#654321');
+                let spawnX = (Math.random() - 0.5) * 10;
+                duck.setAttribute('position', {x: spawnX, y: 0.5, z: -12});
+                document.querySelector('a-scene').appendChild(duck);
+            }
+          }, 3000);
         }
       });
     </script>
@@ -75,26 +85,28 @@
   <body>
     <a-scene background="color: #87CEEB" spawner>
       
-      <a-camera position="0 1.6 0" look-controls wasd-controls="enabled: false">
-        <a-entity cursor="fuse: true; fuseTimeout: 150"
+      <a-camera position="0 1.6 0" look-controls>
+        <a-entity cursor="fuse: true; fuseTimeout: 250"
                   raycaster="objects: .clickable"
                   position="0 0 -1"
-                  geometry="primitive: ring; radiusInner: 0.02; radiusOuter: 0.03"
-                  material="color: white; shader: flat"
-                  animation__fusing="property: scale; startEvents: fusing; dur: 150; from: 1 1 1; to: 0.1 0.1 0.1"
-                  animation__mouseleave="property: scale; startEvents: mouseleave; dur: 50; to: 1 1 1">
+                  geometry="primitive: ring; radiusInner: 0.015; radiusOuter: 0.025"
+                  material="color: white; shader: flat">
         </a-entity>
         
-        <a-text id="score-text" value="Score: 0" position="-1.5 1 -2" color="#000" width="4" font="monoid"></a-text>
+        <a-text id="score-text" value="Score: 0" position="-1.2 0.8 -1.5" color="#000" width="3"></a-text>
+        <a-text id="ammo-text" value="Ammo: 3" position="0.8 0.8 -1.5" color="#ff0000" width="3"></a-text>
       </a-camera>
 
-      <a-plane position="0 0 -10" rotation="-90 0 0" width="60" height="60" color="#228B22"></a-plane>
+      <a-plane position="0 0 -10" rotation="-90 0 0" width="100" height="100" color="#228B22"></a-plane>
       <a-sky color="#87CEEB"></a-sky>
 
-      <a-entity id="bushes" position="0 0 -10">
-        <a-sphere position="-5 0.5 0" radius="2" color="#006400"></a-sphere>
-        <a-sphere position="0 0.5 0" radius="2.5" color="#006400"></a-sphere>
-        <a-sphere position="5 0.5 0" radius="2" color="#006400"></a-sphere>
+      <a-entity position="-6 0 -15">
+        <a-cylinder color="#8B4513" radius="0.5" height="4"></a-cylinder>
+        <a-sphere color="#006400" radius="2" position="0 4 0"></a-sphere>
+      </a-entity>
+      <a-entity position="8 0 -18">
+        <a-cylinder color="#8B4513" radius="0.3" height="3"></a-cylinder>
+        <a-sphere color="#228B22" radius="1.5" position="0 3 0"></a-sphere>
       </a-entity>
 
     </a-scene>

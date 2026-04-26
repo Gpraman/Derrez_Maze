@@ -2,109 +2,135 @@
 <html lang="el">
   <head>
     <meta charset="utf-8">
-    <title>VR Arkanoid - Custom Physics</title>
+    <title>VR Arkanoid V2 - Refined Control & Lives</title>
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
 
     <script>
       /* ========================================================
          1. ΕΛΕΓΧΟΣ ΡΑΚΕΤΑΣ (Gaze-based Paddle)
-         Η ρακέτα ακολουθεί το σημείο που κοιτάζει η κάμερα.
          ======================================================== */
       AFRAME.registerComponent('gaze-paddle', {
         tick: function () {
           let cam = document.querySelector('#player').object3D;
           let direction = new THREE.Vector3();
-          cam.getWorldDirection(direction); // Βρίσκουμε το διάνυσμα του βλέμματος
+          cam.getWorldDirection(direction);
           
-          // Η ρακέτα κινείται στους άξονες X, Y αλλά μένει "κλειδωμένη" στο Z = -2
           this.el.setAttribute('position', {
-            x: direction.x * -6, // Πολλαπλασιαστής ταχύτητας αριστερά/δεξιά
-            y: 1.6 + (direction.y * 6), // 1.6 είναι το ύψος των ματιών
+            x: direction.x * -6, 
+            y: 1.6 + (direction.y * 6), 
             z: -2 
           });
         }
       });
 
       /* ========================================================
-         2. ΜΗΧΑΝΗ ΦΥΣΙΚΗΣ ΤΗΣ ΜΠΑΛΑΣ (Custom Physics Engine)
-         Διαχειρίζεται κίνηση, αναπηδήσεις και σπάσιμο τούβλων.
+         2. ΜΗΧΑΝΗ ΦΥΣΙΚΗΣ ΤΗΣ ΜΠΑΛΑΣ (Custom Physics - Revised)
+         *ADDRESSES CONTROL AND LOSE CONDITION*
          ======================================================== */
       AFRAME.registerComponent('ball-physics', {
+        schema: {
+          initialLives: {type: 'int', default: 3}
+        },
         init: function () {
-          // Η αρχική ταχύτητα της μπάλας (X, Y, Z)
-          this.velocity = {x: 0.05, y: 0.05, z: -0.1};
+          this.velocity = {x: 0.04, y: 0.04, z: -0.09}; // Λίγο πιο αργή μπάλα για έλεγχο
+          this.currentLives = this.data.initialLives;
+          this.gameOver = false;
+          this.lifeText = document.querySelector('#life-counter');
+          this.gameOverText = document.querySelector('#game-over-text');
+          this.updateLifeDisplay();
+        },
+        updateLifeDisplay: function () {
+          this.lifeText.setAttribute('value', 'Lives: ' + this.currentLives);
+        },
+        triggerGameOver: function () {
+          this.gameOver = true;
+          this.velocity = {x: 0, y: 0, z: 0}; // Σταμάτημα μπάλας
+          this.gameOverText.setAttribute('visible', true);
+        },
+        resetBall: function() {
+           let pos = this.el.getAttribute('position');
+           pos.x = 0; pos.y = 2; pos.z = -5; // Reset στο κέντρο
+           this.el.setAttribute('position', pos);
+           this.velocity = {x: 0.04, y: 0.04, z: -0.09}; // Reset ταχύτητας
         },
         tick: function () {
+          if (this.gameOver) return; // Σταματάμε αν τελείωσε το παιχνίδι
+
           let pos = this.el.getAttribute('position');
           
-          // 1. Εφαρμογή της κίνησης (Προσθέτουμε την ταχύτητα στη θέση)
           pos.x += this.velocity.x;
           pos.y += this.velocity.y;
           pos.z += this.velocity.z;
 
-          // 2. ΑΝΑΠΗΔΗΣΕΙΣ ΣΤΟ ΤΟΥΝΕΛ
-          if (pos.x > 4 || pos.x < -4) this.velocity.x *= -1; // Δεξιά/Αριστερά
-          if (pos.y > 6 || pos.y < 0.2) this.velocity.y *= -1; // Ταβάνι/Πάτωμα
-          if (pos.z < -15) this.velocity.z *= -1; // Πίσω τοίχος
+          // ΑΝΑΠΗΔΗΣΕΙΣ ΣΤΟ ΤΟΥΝΕΛ
+          if (pos.x > 4 || pos.x < -4) this.velocity.x *= -1;
+          if (pos.y > 6 || pos.y < 0.2) this.velocity.y *= -1;
+          if (pos.z < -15) this.velocity.z *= -1;
 
-          // 3. ΑΝΑΠΗΔΗΣΗ ΣΤΗ ΡΑΚΕΤΑ (Στο Z = -2)
+          // ΑΝΑΠΗΔΗΣΗ ΣΤΗ ΡΑΚΕΤΑ
           let paddlePos = document.querySelector('#paddle').getAttribute('position');
           if (pos.z > -2.2 && pos.z < -1.8) {
-            // Αν η μπάλα είναι μέσα στα όρια X και Y της ρακέτας
             if (Math.abs(pos.x - paddlePos.x) < 1.5 && Math.abs(pos.y - paddlePos.y) < 1.0) {
-              this.velocity.z *= -1; // Αντίστροφη πορεία προς τα τούβλα!
+              this.velocity.z *= -1;
               
-              // Βάζουμε λίγο "φάλτσο" ανάλογα με το πού χτύπησε στη ρακέτα
-              this.velocity.x = (pos.x - paddlePos.x) * 0.05;
-              this.velocity.y = (pos.y - paddlePos.y) * 0.05;
+              // ΒΕΛΤΙΩΣΗ ΕΛΕΓΧΟΥ: Μείωση του πολλαπλασιαστή φάλτσου σε 0.015 (από 0.05)
+              // Τώρα η γωνία αναπήδησης είναι πιο subtle
+              this.velocity.x += (pos.x - paddlePos.x) * 0.015;
+              this.velocity.y += (pos.y - paddlePos.y) * 0.015;
             }
           }
 
-          // 4. GAME OVER (Η μπάλα πέρασε πίσω από τον παίκτη)
-          if (pos.z > 1) {
-            pos.x = 0; pos.y = 2; pos.z = -5; // Reset στο κέντρο
-            this.velocity = {x: 0.05, y: 0.05, z: -0.1}; // Reset ταχύτητας
+          // ΣΥΝΘΗΚΗ ΗΤΤΑΣ (GAME OVER)
+          if (pos.z > 1) { // Η μπάλα πέρασε πίσω από τον παίκτη
+            this.currentLives--;
+            this.updateLifeDisplay();
+            
+            if (this.currentLives <= 0) {
+              this.triggerGameOver();
+            } else {
+              this.resetBall(); // Απλό reset αν έχουμε κι άλλες ζωές
+            }
           }
 
-          // 5. ΣΥΓΚΡΟΥΣΗ ΜΕ ΤΟΥΒΛΑ (Bricks)
+          // ΣΥΓΚΡΟΥΣΗ ΜΕ ΤΟΥΒΛΑ
           let bricks = document.querySelectorAll('.brick');
           for (let i = 0; i < bricks.length; i++) {
             let brick = bricks[i];
             let bPos = brick.getAttribute('position');
-            
-            // Υπολογισμός απόστασης Μπάλας - Τούβλου σε 3D (Πυθαγόρειο)
             let dx = pos.x - bPos.x;
             let dy = pos.y - bPos.y;
             let dz = pos.z - bPos.z;
             let distance = Math.sqrt(dx*dx + dy*dy + dz*dz);
 
-            if (distance < 1.0) { // Αν συγκρουστούν
-              this.velocity.z *= -1; // Η μπάλα γυρίζει πίσω
-              brick.parentNode.removeChild(brick); // Καταστροφή του τούβλου!
-              break; // Σπάμε μόνο 1 τούβλο ανά καρέ για να μη γίνει glitch
+            if (distance < 1.0) {
+              this.velocity.z *= -1;
+              brick.parentNode.removeChild(brick);
+              break; 
             }
           }
-
-          // Ενημέρωση της νέας θέσης στο 3D μοντέλο
           this.el.setAttribute('position', pos);
         }
       });
     </script>
   </head>
   <body>
-    <a-scene background="color: #0a0a1a">
+    <a-scene background="color: #0d0d1a">
       
-      <a-camera id="player" position="0 1.6 0" look-controls wasd-controls="enabled: false"></a-camera>
+      <a-camera id="player" position="0 1.6 0" look-controls="pointerLockEnabled: true" wasd-controls="enabled: false" camera="fov: 100"></a-camera>
 
-      <a-box id="paddle" width="2" height="1" depth="0.2" color="#00ffff" opacity="0.6" wireframe="true" gaze-paddle></a-box>
+      <a-box id="paddle" width="2" height="1" depth="0.2" color="#00ffff" opacity="0.7" wireframe="true" gaze-paddle></a-box>
 
       <a-sphere id="ball" position="0 2 -5" radius="0.3" color="#ff00ff" ball-physics></a-sphere>
 
-      <a-plane position="0 0 -7.5" rotation="-90 0 0" width="10" height="15" color="#111" wireframe="true"></a-plane>
-      <a-box position="-4.5 3 -7.5" width="0.5" height="6" depth="15" color="#222"></a-box>
-      <a-box position="4.5 3 -7.5" width="0.5" height="6" depth="15" color="#222"></a-box>
-      <a-box position="0 6 -7.5" width="10" height="0.5" depth="15" color="#222"></a-box>
-      <a-box position="0 3 -15.5" width="10" height="6" depth="0.5" color="#00ffff" wireframe="true"></a-box>
+      <a-plane position="0 0 -7.5" rotation="-90 0 0" width="10" height="15" color="#1a1a2a" wireframe="true"></a-plane>
+      <a-box position="-4.5 3 -7.5" width="0.5" height="6" depth="15" color="#2a2a3a"></a-box>
+      <a-box position="4.5 3 -7.5" width="0.5" height="6" depth="15" color="#2a2a3a"></a-box>
+      <a-box position="0 6 -7.5" width="10" height="0.5" depth="15" color="#2a2a3a"></a-box>
+      <a-box position="0 3 -15.5" width="10" height="6" depth="0.5" color="#00ffaa" wireframe="true"></a-box>
+
+      <a-text id="life-counter" value="Lives: 3" position="-4.5 5.5 -15" color="#fff" width="12" align="center"></a-text>
+      
+      <a-text id="game-over-text" value="GAME OVER" visible="false" position="0 3 -10" color="#ff0000" width="25" align="center" scale="2 2 2"></a-text>
 
       <a-entity id="brick-wall" position="0 0 0">
         <a-box class="brick" position="-2 2 -12" width="1.5" height="0.8" depth="0.5" color="#ff3366"></a-box>

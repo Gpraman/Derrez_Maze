@@ -2,91 +2,112 @@
 <html lang="el">
   <head>
     <meta charset="utf-8">
-    <title>VR Rail Shooter - Prototype</title>
+    <title>VR Duck Hunt - Low-Poly Prototype</title>
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
 
     <script>
       /* ========================================================
-         1. ΣΥΣΤΗΜΑ ΚΙΝΗΣΗΣ (The Rail)
-         Μετακινεί τον παίκτη (το Rig) συνεχώς προς τα εμπρός.
+         1. ΣΥΣΤΗΜΑ ΓΕΝΝΗΣΗΣ ΠΑΠΙΩΝ (Duck Spawner & AI)
+         Δημιουργεί και κινεί τις πάπιες τυχαία.
          ======================================================== */
-      AFRAME.registerComponent('rail-mover', {
-        schema: { speed: { type: 'number', default: 0.15 } },
+      let score = 0;
+
+      AFRAME.registerComponent('duck-ai', {
+        schema: {
+          speed: { type: 'number', default: 0.08 }, // Ταχύτητα πάπιας
+          lifetime: { type: 'number', default: 5000 } // Χρόνος μέχρι να φύγει (5sec)
+        },
+        init: function () {
+          let el = this.el;
+          
+          // Τυχαία κατεύθυνση πτήσης (Vector)
+          this.direction = new THREE.Vector3(
+            (Math.random() - 0.5) * 2, // X: τυχαία αριστερά/δεξιά
+            (Math.random() * 0.5) + 0.1, // Y: πάντα προς τα πάνω
+            (Math.random() - 0.5) * 1 // Z: λίγο μπρος/πίσω
+          );
+          this.direction.normalize().multiplyScalar(this.data.speed);
+
+          // Αυτοκαταστροφή αν δεν την πετύχεις
+          this.timer = setTimeout(() => {
+            if(el.parentNode) el.parentNode.removeChild(el);
+          }, this.data.lifetime);
+
+          // Αλληλεπίδραση (MouseEnter / Click)
+          el.addEventListener('mouseenter', () => el.setAttribute('color', '#ff0')); // Γίνεται κίτρινη όταν τη σημαδεύεις
+          el.addEventListener('mouseleave', () => el.setAttribute('color', '#654321')); // Επιστρέφει στο καφέ
+
+          // Όταν την πετύχεις
+          el.addEventListener('click', () => {
+            score += 50; // +50 πόντοι
+            document.querySelector('#score-text').setAttribute('value', 'Score: ' + score);
+            
+            clearTimeout(this.timer); // Ακύρωση του timer αυτοκαταστροφής
+            // Εφέ "πτώσης" (απλή κίνηση προς τα κάτω)
+            el.setAttribute('animation', 'property: position; to: ' + el.getAttribute('position').x + ' 0 ' + el.getAttribute('position').z + '; dur: 500; easing: easeInQuad');
+            // Διαγραφή μετά το εφέ
+            setTimeout(() => { if(el.parentNode) el.parentNode.removeChild(el); }, 500);
+          });
+        },
         tick: function () {
+          // Κίνηση της πάπιας
           let pos = this.el.getAttribute('position');
-          pos.z -= this.data.speed; // Προχωράμε βαθύτερα στον άξονα Z (αρνητικό)
+          pos.x += this.direction.x;
+          pos.y += this.direction.y;
+          pos.z += this.direction.z;
           this.el.setAttribute('position', pos);
         }
       });
 
-      /* ========================================================
-         2. ΣΥΣΤΗΜΑ ΣΤΟΧΩΝ (Targets & Scoring)
-         Διαχειρίζεται την αλληλεπίδραση και το σκορ.
-         ======================================================== */
-      let score = 0; // Η μεταβλητή του σκορ ξεκινάει από το 0
-
-      AFRAME.registerComponent('target', {
+      // COMPONENT ΓΙΑ ΤΟ GENERATION (Spawner)
+      AFRAME.registerComponent('spawner', {
+        schema: { interval: { type: 'number', default: 3000 } }, // Νέα πάπια κάθε 3sec
         init: function () {
-          let el = this.el;
+          this.scene = document.querySelector('a-scene');
+          this.timer = setInterval(() => this.spawnDuck(), this.data.interval);
+        },
+        spawnDuck: function () {
+          // Μην γεννάς πολλές πάπιες ταυτόχρονα (max 3)
+          if(document.querySelectorAll('.duck').length >= 3) return;
+
+          let duck = document.createElement('a-box'); // Χρησιμοποιούμε κουτί για low-poly αίσθηση
+          duck.setAttribute('class', 'duck clickable');
+          duck.setAttribute('duck-ai', ''); // Προσθέτουμε την AI
+          duck.setAttribute('width', '0.6'); duck.setAttribute('height', '0.4'); duck.setAttribute('depth', '0.8');
+          duck.setAttribute('color', '#654321'); // Καφέ σώμα
           
-          // ΤΙ ΓΙΝΕΤΑΙ ΟΤΑΝ ΤΟΝ ΚΟΙΤΑΜΕ (Hover)
-          el.addEventListener('mouseenter', function () {
-            el.setAttribute('color', '#ff0044'); // Γίνεται κόκκινος
-            el.setAttribute('scale', '1.2 1.2 1.2'); // Μεγαλώνει λίγο
-          });
+          // Τυχαίο σημείο έναρξης πίσω από τους θάμνους (X: -5 to 5, Z: -10 to -15)
+          let spawnX = (Math.random() - 0.5) * 10;
+          let spawnZ = -10 - (Math.random() * 5);
+          duck.setAttribute('position', {x: spawnX, y: 1, z: spawnZ});
 
-          // ΤΙ ΓΙΝΕΤΑΙ ΟΤΑΝ ΠΑΙΡΝΟΥΜΕ ΤΟ ΒΛΕΜΜΑ ΜΑΣ (Mouse leave)
-          el.addEventListener('mouseleave', function () {
-            el.setAttribute('color', '#00ffaa'); // Επιστρέφει στο αρχικό πράσινο
-            el.setAttribute('scale', '1 1 1');
-          });
-
-          // ΤΙ ΓΙΝΕΤΑΙ ΟΤΑΝ "ΠΥΡΟΒΟΛΑΜΕ" (Click/Fuse)
-          el.addEventListener('click', function () {
-            score += 10; // Προσθέτουμε 10 πόντους
-            document.querySelector('#score-text').setAttribute('value', 'Score: ' + score);
-            
-            // Καταστρέφουμε τον στόχο
-            el.parentNode.removeChild(el);
-          });
+          this.scene.appendChild(duck);
         }
       });
     </script>
   </head>
   <body>
-    <a-scene background="color: #050510">
+    <a-scene background="color: #87CEEB" spawner>
       
-      <a-entity id="rig" position="0 0 0" rail-mover>
+      <a-camera position="0 1.6 0" look-controls wasd-controls="enabled: false">
+        <a-entity cursor="fuse: true; fuseTimeout: 500"
+                  raycaster="objects: .clickable"
+                  position="0 0 -1"
+                  geometry="primitive: ring; radiusInner: 0.02; radiusOuter: 0.03"
+                  material="color: white; shader: flat"
+                  animation__fusing="property: scale; startEvents: fusing; dur: 500; from: 1 1 1; to: 0.1 0.1 0.1"
+                  animation__mouseleave="property: scale; startEvents: mouseleave; dur: 100; to: 1 1 1">
+        </a-entity>
         
-        <a-camera position="0 1.6 0" look-controls wasd-controls="enabled: false">
-          
-          <a-entity cursor="fuse: true; fuseTimeout: 800"
-                    raycaster="objects: .clickable"
-                    position="0 0 -1"
-                    geometry="primitive: ring; radiusInner: 0.02; radiusOuter: 0.03"
-                    material="color: white; shader: flat"
-                    animation__fusing="property: scale; startEvents: fusing; easing: easeInCubic; dur: 800; from: 1 1 1; to: 0.1 0.1 0.1"
-                    animation__mouseleave="property: scale; startEvents: mouseleave; easing: easeInCubic; dur: 100; to: 1 1 1">
-          </a-entity>
-          
-          <a-text id="score-text" value="Score: 0" position="-0.8 0.8 -1.5" color="#00ffff" width="3" font="monoid"></a-text>
-        </a-camera>
+        <a-text id="score-text" value="Score: 0" position="-1.5 1 -2" color="#000" width="4" font="monoid"></a-text>
+      </a-camera>
 
-      </a-entity>
-
-      <a-plane position="0 0 -100" rotation="-90 0 0" width="40" height="400" color="#111" wireframe="true"></a-plane>
-      
-      <a-entity id="targets">
-        <a-sphere class="clickable" target position="-3 2 -20" radius="0.8" color="#00ffaa"></a-sphere>
-        <a-sphere class="clickable" target position="3 4 -30" radius="0.8" color="#00ffaa"></a-sphere>
-        
-        <a-sphere class="clickable" target position="0 6 -50" radius="0.8" color="#00ffaa"></a-sphere>
-        <a-sphere class="clickable" target position="-5 1 -60" radius="0.8" color="#00ffaa"></a-sphere>
-        <a-sphere class="clickable" target position="5 3 -70" radius="0.8" color="#00ffaa"></a-sphere>
-
-        <a-sphere class="clickable" target position="-4 5 -90" radius="0.8" color="#00ffaa"></a-sphere>
-        <a-sphere class="clickable" target position="4 1 -100" radius="0.8" color="#00ffaa"></a-sphere>
-        <a-sphere class="clickable" target position="0 4 -120" radius="0.8" color="#00ffaa"></a-sphere>
+      <a-plane position="0 0 -10" rotation="-90 0 0" width="50" height="50" color="#228B22"></a-plane> <a-sky color="#87CEEB"></a-sky> <a-entity id="bushes" position="0 0 -8">
+        <a-sphere position="-4 0.5 0" radius="1.5" color="#006400"></a-sphere>
+        <a-sphere position="-2 0.8 1" radius="1.2" color="#228B22"></a-sphere>
+        <a-sphere position="0 0.5 0" radius="1.8" color="#006400"></a-sphere>
+        <a-sphere position="3 0.7 0.5" radius="1.4" color="#228B22"></a-sphere>
+        <a-sphere position="5 0.5 -1" radius="1.6" color="#006400"></a-sphere>
       </a-entity>
 
     </a-scene>

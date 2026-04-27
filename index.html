@@ -2,18 +2,71 @@
 <html lang="el">
 <head>
     <meta charset="utf-8">
-    <title>VR II: The Grid - Reactive Rezzing</title>
+    <title>VR II: The Grid - Audio Edition</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         const CELL_SIZE = 4;
         
-        // TRON Χρωματική Παλέτα
         const TRON_COLORS = {
             heroCyan: '#00FFFF',
             enemyOrange: '#FF4500',
             dataWhite: '#FFFFFF',
             gridBlue: '#0000FF',
             skyBlack: '#000000'
+        };
+
+        // --- ΜΗΧΑΝΗ ΗΧΟΥ (Web Audio API Synthesizer) ---
+        const SoundEngine = {
+            ctx: null,
+            init: function() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            },
+            playTone: function(freq, type, duration, vol=0.5) {
+                if (!this.ctx) return;
+                let osc = this.ctx.createOscillator();
+                let gain = this.ctx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                
+                // Envelope (Απαλό σβήσιμο του ήχου)
+                gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+                
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + duration);
+            },
+            playDiscCollect: function() {
+                this.init();
+                // Διπλός ψηφιακός ήχος (High Ping)
+                this.playTone(880, 'sine', 0.2, 0.3); // A5
+                setTimeout(() => this.playTone(1760, 'sine', 0.4, 0.3), 100); // A6
+            },
+            playPortalOpen: function() {
+                this.init();
+                // Βαρύς ήχος που ανεβαίνει (Siren/Riser)
+                if (!this.ctx) return;
+                let osc = this.ctx.createOscillator();
+                let gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                
+                osc.frequency.setValueAtTime(100, this.ctx.currentTime);
+                osc.frequency.linearRampToValueAtTime(600, this.ctx.currentTime + 2); // Ανεβαίνει η συχνότητα
+                
+                gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 3);
+                
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 3);
+            }
         };
 
         AFRAME.registerComponent('procedural-maze', {
@@ -30,11 +83,18 @@
                 this.lastPos = new THREE.Vector3();
                 this.wonGame = false;
                 
-                // Δημιουργούμε τα χρώματα σε μορφή THREE.Color για ταχύτατη επεξεργασία (Performance boost)
                 this.heroColorObj = new THREE.Color(TRON_COLORS.heroCyan);
                 this.enemyColorObj = new THREE.Color(TRON_COLORS.enemyOrange);
                 this.activeWallColor = this.heroColorObj;
                 
+                // Ξεκλείδωμα ήχου με το πρώτο κλικ (Κανόνας των Browsers)
+                window.addEventListener('click', () => {
+                    SoundEngine.init();
+                    // Προαιρετικά: Αν έχεις ένα MP3 αρχείο, μπορείς να το κάνεις play εδώ
+                    let bgm = document.querySelector('#bgm');
+                    if(bgm && bgm.paused) bgm.play();
+                }, {once:true});
+
                 this.loadLevel(this.currentLevel);
             },
 
@@ -62,7 +122,7 @@
                 this.exitEl = null;
                 this.shardsCollected = 0;
                 this.levelWon = false;
-                this.activeWallColor = this.heroColorObj; // Επαναφορά σε Cyan
+                this.activeWallColor = this.heroColorObj; 
 
                 let mapSize = 7 + (level * 2); 
                 this.totalShards = 2 + Math.floor(level / 2); 
@@ -89,7 +149,6 @@
                             wall.setAttribute('width', CELL_SIZE);
                             wall.setAttribute('height', 4);
                             wall.setAttribute('depth', CELL_SIZE);
-                            // Ορίζουμε transparent:true ώστε το υλικό να μπορεί να γίνει αόρατο δυναμικά
                             wall.setAttribute('material', `color: ${TRON_COLORS.skyBlack}; wireframe: true; transparent: true; opacity: 0.05`);
                             this.mazeContainer.appendChild(wall);
                             this.walls.push(wall);
@@ -97,7 +156,6 @@
                     }
                 }
 
-                // Τοποθέτηση Discs
                 for (let i = 0; i < this.totalShards; i++) {
                     let spot = emptySpots.pop();
                     this.currentMap[spot.z][spot.x] = 3; 
@@ -121,7 +179,6 @@
                     this.shards.push(discEntity);
                 }
 
-                // The Portal
                 let exitSpot = emptySpots.pop();
                 this.currentMap[exitSpot.z][exitSpot.x] = 2; 
                 this.exitEl = document.createElement('a-cylinder');
@@ -144,7 +201,7 @@
                 
                 this.floor.setAttribute('color', TRON_COLORS.gridBlue);
                 this.levelUI.innerText = `SECTOR: ${this.currentLevel} / ${this.maxLevels}`;
-                this.messageUI.innerText = "ΑΝΑΚΤΗΣΕ ΤΑ ΔΕΔΟΜΕΝΑ";
+                this.messageUI.innerText = "ΚΑΝΕ ΚΛΙΚ ΣΤΗΝ ΟΘΟΝΗ\nΓΙΑ ΝΑ ΕΝΕΡΓΟΠΟΙΗΣΕΙΣ ΤΟΝ ΗΧΟ";
                 this.messageUI.style.color = TRON_COLORS.dataWhite;
                 this.messageUI.style.borderColor = TRON_COLORS.heroCyan;
                 this.updateUI();
@@ -157,24 +214,19 @@
                 let gridX = Math.round(pos.x / CELL_SIZE);
                 let gridZ = Math.round(pos.z / CELL_SIZE);
 
-                // --- REZZING SYSTEM (Η Υλοποίηση των Τοίχων) ---
-                let rezRadius = 16; // Πόσο μακριά φωτίζονται οι τοίχοι
+                let rezRadius = 16; 
                 this.walls.forEach(wall => {
                     let mesh = wall.getObject3D('mesh');
                     if (mesh && mesh.material) {
                         let dist = pos.distanceTo(wall.object3D.position);
-                        // Υπολογισμός έντασης βάσει απόστασης (1 = κοντά, 0 = μακριά)
                         let intensity = Math.max(0.0, 1 - (dist / rezRadius));
                         
-                        // Αλλάζουμε τις ιδιότητες του υλικού απευθείας για κορυφαία απόδοση
                         mesh.material.emissive = this.activeWallColor;
                         mesh.material.emissiveIntensity = intensity * 2;
-                        // Κρατάμε ένα 5% ορατότητα από μακριά για να μη νιώθει ο παίκτης ότι είναι στο κενό
                         mesh.material.opacity = Math.max(0.05, intensity); 
                     }
                 });
 
-                // --- STEALTH DISCS ---
                 let visibilityRadius = 5; 
                 this.shards.forEach(shard => {
                     if (shard.parentNode) {
@@ -187,7 +239,6 @@
                     }
                 });
 
-                // --- MOVEMENT & COLLISION ---
                 if (gridZ >= 0 && gridZ < this.currentMap.length && gridX >= 0 && gridX < this.currentMap[0].length) {
                     let tileType = this.currentMap[gridZ][gridX];
 
@@ -215,6 +266,9 @@
                 this.currentMap[z][x] = 0; 
                 this.shardsCollected++;
                 
+                // Παίζουμε τον ήχο συλλογής
+                SoundEngine.playDiscCollect();
+
                 let shardToRemove = this.shards.find(s => s.gridPos.x === x && s.gridPos.z === z);
                 if (shardToRemove && shardToRemove.parentNode) {
                     shardToRemove.parentNode.removeChild(shardToRemove);
@@ -223,12 +277,14 @@
                 this.updateUI();
 
                 if (this.shardsCollected === this.totalShards) {
+                    // Παίζουμε τον ήχο του Portal
+                    SoundEngine.playPortalOpen();
+
                     this.messageUI.innerText = "PORTAL ΕΝΕΡΓΟΠΟΙΗΘΗΚΕ!";
                     this.messageUI.style.color = TRON_COLORS.enemyOrange;
                     this.messageUI.style.borderColor = TRON_COLORS.enemyOrange;
                     this.exitEl.setAttribute('visible', 'true');
                     
-                    // Αλλάζουμε το χρώμα υλοποίησης των τοίχων σε Πορτοκαλί (Συναγερμός)
                     this.activeWallColor = this.enemyColorObj;
                     this.floor.setAttribute('color', TRON_COLORS.enemyOrange);
                 } else {
@@ -267,7 +323,7 @@
         </div>
         <br>
         <div id="hud-message" style="color: #ffffff; font-family: 'Courier New', Courier, monospace; font-size: 1.2rem; background: rgba(0, 0, 0, 0.9); display: inline-block; padding: 10px 20px; border-radius: 2px; border: 2px solid #00FFFF; white-space: pre-line; text-transform: uppercase; margin-bottom: 5px; letter-spacing: 2px;">
-            ΑΝΑΚΤΗΣΕ ΤΑ ΔΕΔΟΜΕΝΑ
+            ΦΟΡΤΩΣΗ...
         </div>
         <br>
         <div id="hud-inv" style="color: #00FFFF; font-family: 'Courier New', Courier, monospace; font-size: 1.2rem; font-weight: bold; background: rgba(0, 0, 0, 0.9); display: inline-block; padding: 8px 15px; border-radius: 2px; border: 1px solid #00FFFF;">
@@ -279,7 +335,6 @@
         <a-light type="ambient" intensity="0.2" color="#444466"></a-light>
         <a-plane id="floor-grid" position="50 0 50" rotation="-90 0 0" width="300" height="300" color="#0000FF" wireframe="true" wireframe-linewidth="1" material="shader: flat"></a-plane>
         <a-entity id="maze-container"></a-entity>
-
         <a-entity id="camera" camera look-controls wasd-controls="acceleration: 25">
             <a-light type="point" intensity="0.5" distance="10" color="#00FFFF" position="0 0 -1"></a-light>
         </a-entity>

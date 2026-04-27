@@ -2,51 +2,48 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>VR II: The Memory Glitch</title>
+    <title>VR II: Σφάλμα Μνήμης</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
-        // NAVIGATION MAP (Grid 3x3)
-        // 0 σημαίνει "τοίχος" / μη προσβάσιμο
+        // ΧΑΡΤΗΣ ΠΛΟΗΓΗΣΗΣ (Grid 3x3)
+        // Το 0 σημαίνει "αδιέξοδο"
         const MAP = [
             [0, 5, 6],
             [2, 1, 0],
             [0, 3, 4]
         ];
 
-        // ΚΕΙΜΕΝΑ (Αντί για ρεαλιστικά, χρησιμοποιούμε Cyberpunk / Glitch ύφος)
+        // ΕΛΛΗΝΙΚΑ ΚΕΙΜΕΝΑ ΠΕΡΙΒΑΛΛΟΝΤΟΣ
         const TEXT = [
-            'System Boot... Sector 0:\nMissing fragments detected.',
-            'A corrupted logic gate blocks the way:\n"Provide kernel_key or terminate."',
-            'Buffer Overflow area.\nThe Firewall daemon is watching...',
-            'Port 8080:\nGateway to the cloud. Ready for upload?',
-            'A fragment of deleted code whispers:\n"Help me recompile..."',
-            'The Core.\nSystem override is required...'
+            'Εκκίνηση... Τομέας 0:\nΕντοπίστηκαν σφάλματα.',
+            'Κατεστραμμένη Πύλη:\nΑπαιτείται "Κλειδί_Συστήματος.exe"',
+            'Υπερχείλιση Μνήμης.\nΤο Firewall παρακολουθεί...',
+            'Θύρα 8080:\nΗ έξοδος στο Δίκτυο. Είσαι έτοιμος;',
+            'Διαγραμμένος Κώδικας:\n"Βοήθησέ με να επαναφερθώ..."',
+            'Ο Πυρήνας.\nΑναμονή για Δικαιώματα Διαχειριστή...'
         ];
 
-        // ΕΔΩ ΕΙΝΑΙ Ο ΝΕΟΣ "game-logic" ΚΩΔΙΚΑΣ ΣΕ A-FRAME COMPONENT
         AFRAME.registerComponent('game-logic', {
             init: function () {
                 this.currentScene = 1;
-                this.inventory = ['kernel_key.exe'];
+                // Αρχίζουμε με το πρώτο αντικείμενο
+                this.inventory = ['Κλειδί_Συστήματος.exe'];
                 this.textEl = document.querySelector('#info');
                 
-                // Αρχικοποίηση πρώτης σκηνής
-                this.updateScene();
-
-                // Χειρισμός Κίνησης (Κώνοι)
+                // Προσθέτουμε events στα βελάκια
                 const directions = ['north', 'south', 'east', 'west'];
                 directions.forEach(dir => {
                     const cone = document.querySelector('#' + dir);
                     if (cone) {
-                        cone.classList.add('interactive');
                         cone.addEventListener('click', () => this.move(dir));
                     }
                 });
 
-                // Χειρισμός Αλληλεπίδρασης (Αντικείμενα)
                 document.querySelectorAll('.object').forEach(el => {
                     el.addEventListener('click', (e) => this.interact(e.target));
                 });
+
+                this.updateScene();
             },
 
             getCoords: function(sceneId) {
@@ -70,17 +67,9 @@
                 if (dir === 'east') nx++;
                 if (dir === 'west') nx--;
 
-                // Έλεγχος αν βγαίνουμε εκτός ορίων του χάρτη
-                if (ny >= 0 && ny < 3 && nx >= 0 && nx < 3) {
-                    let nextScene = MAP[ny][nx];
-                    if (nextScene !== 0) {
-                        this.currentScene = nextScene;
-                        this.updateScene();
-                    } else {
-                        this.displayText("ACCESS DENIED:\nFirewall blocks this path.");
-                    }
-                } else {
-                    this.displayText("END OF LINE:\nCannot proceed further.");
+                if (ny >= 0 && ny < 3 && nx >= 0 && nx < 3 && MAP[ny][nx] !== 0) {
+                    this.currentScene = MAP[ny][nx];
+                    this.updateScene();
                 }
             },
 
@@ -91,30 +80,42 @@
                 let fail = el.getAttribute('fail');
 
                 if (drop) {
+                    // Αν απαιτεί αντικείμενο που ΕΧΟΥΜΕ
                     if (this.inventory.includes(drop)) {
-                        this.displayText(goal || "Data accepted.");
+                        this.displayText(goal || "Δεδομένα έγιναν αποδεκτά.");
+                        // Προαιρετικά: Αν θέλουμε να του αφαιρεί το αντικείμενο, βάζουμε κώδικα εδώ.
+                        // Για να πάρει την ανταμοιβή του (αν υπάρχει):
+                        if (pick && !this.inventory.includes(pick)) {
+                            this.inventory.push(pick);
+                            el.setAttribute('visible', 'false');
+                            el.classList.remove('interactive', 'object');
+                        }
                     } else {
-                        this.displayText(fail || "Error: Required data missing.");
+                        // Αν δεν έχουμε το σωστό αντικείμενο
+                        this.displayText(fail || "Σφάλμα: Λείπουν δεδομένα.");
                     }
                 } else if (pick) {
+                    // Αν είναι απλά αντικείμενο για μάζεμα
                     if (!this.inventory.includes(pick)) {
                         this.inventory.push(pick);
-                        this.displayText("ACQUIRED:\n" + pick);
+                        this.displayText("ΑΠΟΚΤΗΘΗΚΕ:\n" + pick);
                         el.setAttribute('visible', 'false');
                         el.classList.remove('interactive', 'object');
                     }
                 }
+                
+                // Ανανεώνουμε το κείμενο μετά από 2 δευτερόλεπτα για να δείξουμε ξανά το inventory
+                setTimeout(() => this.updateScene(), 2500);
             },
 
             updateScene: function() {
-                // Απόκρυψη όλων των σκηνών
+                // Κρύβουμε όλες τις σκηνές
                 document.querySelectorAll('.scene').forEach(scene => {
                     scene.setAttribute('visible', 'false');
-                    // Απενεργοποίηση interactions στα αόρατα αντικείμενα
                     scene.querySelectorAll('.object').forEach(obj => obj.classList.remove('interactive'));
                 });
 
-                // Εμφάνιση της τρέχουσας σκηνής
+                // Εμφανίζουμε τη σωστή σκηνή
                 let activeScene = document.querySelector('#scene' + this.currentScene);
                 if (activeScene) {
                     activeScene.setAttribute('visible', 'true');
@@ -125,13 +126,38 @@
                     });
                 }
 
-                // Ενημέρωση του κειμένου HUD
-                this.displayText(TEXT[this.currentScene - 1]);
+                // ΕΞΥΠΝΗ ΕΜΦΑΝΙΣΗ ΒΕΛΩΝ (ΚΩΝΩΝ)
+                let coords = this.getCoords(this.currentScene);
+                const dirs = {
+                    'north': {x: 0, y: -1},
+                    'south': {x: 0, y: 1},
+                    'east': {x: 1, y: 0},
+                    'west': {x: -1, y: 0}
+                };
+
+                Object.keys(dirs).forEach(dir => {
+                    let arrow = document.querySelector('#' + dir);
+                    let nx = coords.x + dirs[dir].x;
+                    let ny = coords.y + dirs[dir].y;
+                    
+                    // Ελέγχουμε αν υπάρχει επόμενη σκηνή προς αυτή την κατεύθυνση
+                    if (ny >= 0 && ny < 3 && nx >= 0 && nx < 3 && MAP[ny][nx] !== 0) {
+                        arrow.setAttribute('visible', 'true'); // Εμφάνιση βέλους
+                        arrow.classList.add('interactive');    // Γίνεται κλικ
+                    } else {
+                        arrow.setAttribute('visible', 'false'); // Απόκρυψη αν είναι αδιέξοδο
+                        arrow.classList.remove('interactive');
+                    }
+                });
+
+                // Ενημέρωση Κειμένου και Inventory
+                let sceneText = TEXT[this.currentScene - 1];
+                let invText = "\n\nΑΠΟΘΗΚΗ ΔΕΔΟΜΕΝΩΝ: " + (this.inventory.length > 0 ? this.inventory.join(", ") : "Άδεια");
+                this.displayText(sceneText + invText);
             },
 
             displayText: function(str) {
                 this.textEl.setAttribute('value', str);
-                // "Animation" αλλαγής χρώματος στο κείμενο για εφέ terminal
                 this.textEl.setAttribute('color', '#ffffff');
                 setTimeout(() => this.textEl.setAttribute('color', '#00ff00'), 150);
             }
@@ -140,68 +166,4 @@
 </head>
 
 <body>
-    <a-scene cursor="rayOrigin: mouse" raycaster="objects: .interactive" game-logic>
-        
-        <a-sky color="#050505"></a-sky>
-        <a-sphere radius="30" wireframe="true" color="#113322" animation="property: rotation; to: 0 360 0; loop: true; dur: 100000"></a-sphere>
-
-        <a-camera wasd-controls="enabled:false">
-            <a-plane color="#000" height="0.4" width="1.2" opacity="0.8" position="0 -0.6 -1">
-                <a-text id="info" width="1" value="Loading..." color="#00ff00" font="monoid" align="center" position="0 0 0.01"></a-text>
-                
-                <a-cone id="east" color="#00ffff" scale="0.05 0.05 0.05" position="0.7 0 0" rotation="0 -30 -88"></a-cone>
-                <a-cone id="west" color="#00ffff" scale="0.05 0.05 0.05" position="-0.7 0 0" rotation="0 30 88"></a-cone>
-                <a-cone id="north" color="#00ffff" scale="0.05 0.05 0.05" position="0 0.25 0" rotation="-20 0 0"></a-cone>
-                <a-cone id="south" color="#00ffff" scale="0.05 0.05 0.05" position="0 -0.25 0" rotation="-40 0 180"></a-cone>
-            </a-plane>
-            
-            <a-cursor fuse="true" animation__fusing="property: scale; from: 1 1 1; to: 0.1 0.1 0.1; dur: 1500; startEvents: fusing" color="#ff00ff"></a-cursor>
-        </a-camera>
-
-        <a-entity id="scene1" class="scene" visible="true">
-            <a-box position="0 1 -4" rotation="0 45 0" wireframe="true" color="#00ff00" scale="1 1 1" animation="property: rotation; to: 0 405 0; loop: true; dur: 4000"></a-box>
-        </a-entity>
-
-        <a-entity id="scene2" class="scene" visible="false">
-            <a-cylinder class="object" position="-3 1 -4" scale="0.5 2 0.5" color="#ff0055" wireframe="true" 
-                drop="kernel_key.exe" 
-                pick="encryption_hash" 
-                goal='Authentication Success.\nHash generated.'
-                fail='Access Denied.\nKernel Key required.'>
-            </a-cylinder>
-        </a-entity>
-
-        <a-entity id="scene3" class="scene" visible="false">
-            <a-dodecahedron class="object" position="-1.25 0.75 -4" scale="1 1 1" color="#ffff00" wireframe="true"
-                drop="admin_rights" 
-                goal='Firewall bypassed...\nYou are in.'
-                fail='Warning!\nUnregistered entity detected.'>
-            </a-dodecahedron>
-        </a-entity>
-
-        <a-entity id="scene4" class="scene" visible="false">
-            <a-torus-knot class="object" position="4 2 1" scale="0.3 0.3 0.3" color="#00ffff" wireframe="true"
-                drop="encryption_hash" 
-                goal="Upload complete.\nYou are free in the web."
-                fail='Error:\nCannot connect to external IP.'>
-            </a-torus-knot>
-        </a-entity>
-
-        <a-entity id="scene5" class="scene" visible="false">
-            <a-octahedron class="object" position="-4 -1.5 2.5" color="#ffffff" wireframe="true"
-                drop="encryption_hash" 
-                goal='Data restored!\nThank you user.' 
-                fail='Sectors corrupted.\nCannot read.'>
-            </a-octahedron>
-        </a-entity>
-
-        <a-entity id="scene6" class="scene" visible="false">
-            <a-entity class="object" position="0 2 -8" pick="admin_rights">
-                <a-cylinder radius="2" height="4" color="#ff00ff" wireframe="true" animation="property: rotation; to: 360 0 0; loop: true; dur: 8000"></a-cylinder>
-                <a-sphere radius="1" color="#00ffff" wireframe="true"></a-sphere>
-            </a-entity>
-        </a-entity>
-
-    </a-scene>
-</body>
-</html>
+    <a-

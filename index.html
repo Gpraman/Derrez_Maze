@@ -166,4 +166,67 @@
 </head>
 
 <body>
-    <a-
+    <a-scene cursor="rayOrigin: mouse" raycaster="objects: .interactive" game-logic>
+        
+        <a-sky color="#050505"></a-sky>
+        <a-sphere radius="30" wireframe="true" color="#113322" animation="property: rotation; to: 0 360 0; loop: true; dur: 100000"></a-sphere>
+
+        <a-camera wasd-controls="enabled:false">
+            <a-plane color="#000" height="0.6" width="1.6" opacity="0.8" position="0 -0.6 -1">
+                <a-text id="info" wrap-count="45" width="1.4" value="Φόρτωση..." color="#00ff00" font="roboto" align="center" position="0 0 0.01"></a-text>
+                
+                <a-cone id="east" color="#00ffff" scale="0.05 0.05 0.05" position="0.9 0 0" rotation="0 -30 -88"></a-cone>
+                <a-cone id="west" color="#00ffff" scale="0.05 0.05 0.05" position="-0.9 0 0" rotation="0 30 88"></a-cone>
+                <a-cone id="north" color="#00ffff" scale="0.05 0.05 0.05" position="0 0.35 0" rotation="-20 0 0"></a-cone>
+                <a-cone id="south" color="#00ffff" scale="0.05 0.05 0.05" position="0 -0.35 0" rotation="-40 0 180"></a-cone>
+            </a-plane>
+            <a-cursor fuse="true" animation__fusing="property: scale; from: 1 1 1; to: 0.1 0.1 0.1; dur: 1500; startEvents: fusing" color="#ff00ff"></a-cursor>
+        </a-camera>
+
+        <a-entity id="scene1" class="scene" visible="true">
+            <a-box position="0 1 -4" rotation="0 45 0" wireframe="true" color="#00ff00" scale="1 1 1" animation="property: rotation; to: 0 405 0; loop: true; dur: 4000"></a-box>
+        </a-entity>
+
+        <a-entity id="scene2" class="scene" visible="false">
+            <a-cylinder class="object" position="-3 1 -4" scale="0.5 2 0.5" color="#ff0055" wireframe="true" 
+                drop="Κλειδί_Συστήματος.exe" 
+                pick="Κρυπτογραφημένο_Hash" 
+                goal='Επιτυχής Ταυτοποίηση.\nΤο Hash δημιουργήθηκε.'
+                fail='Πρόσβαση Απορρίφθηκε.\nΧρειάζεσαι το Κλειδί Συστήματος.'>
+            </a-cylinder>
+        </a-entity>
+
+        <a-entity id="scene3" class="scene" visible="false">
+            <a-dodecahedron class="object" position="-1.25 0.75 -4" scale="1 1 1" color="#ffff00" wireframe="true"
+                drop="Δικαιώματα_Admin" 
+                goal='Firewall παρακάμφθηκε...\nΕίσαι μέσα.'
+                fail='Προειδοποίηση!\nΜη εγγεγραμμένη οντότητα.'>
+            </a-dodecahedron>
+        </a-entity>
+
+        <a-entity id="scene4" class="scene" visible="false">
+            <a-torus-knot class="object" position="4 2 1" scale="0.3 0.3 0.3" color="#00ffff" wireframe="true"
+                drop="Κρυπτογραφημένο_Hash" 
+                goal="Μεταφόρτωση ολοκληρώθηκε.\nΕίσαι ελεύθερος στο δίκτυο!"
+                fail='Σφάλμα:\nΑδυναμία σύνδεσης (Λείπει το Hash).'>
+            </a-torus-knot>
+        </a-entity>
+
+        <a-entity id="scene5" class="scene" visible="false">
+            <a-octahedron class="object" position="-4 -1.5 2.5" color="#ffffff" wireframe="true"
+                drop="Κρυπτογραφημένο_Hash" 
+                goal='Δεδομένα ανακτήθηκαν!\nΕυχαριστώ χρήστη.' 
+                fail='Κατεστραμμένοι τομείς.\nΑδυναμία ανάγνωσης.'>
+            </a-octahedron>
+        </a-entity>
+
+        <a-entity id="scene6" class="scene" visible="false">
+            <a-entity class="object" position="0 2 -8" pick="Δικαιώματα_Admin">
+                <a-cylinder radius="2" height="4" color="#ff00ff" wireframe="true" animation="property: rotation; to: 360 0 0; loop: true; dur: 8000"></a-cylinder>
+                <a-sphere radius="1" color="#00ffff" wireframe="true"></a-sphere>
+            </a-entity>
+        </a-entity>
+
+    </a-scene>
+</body>
+</html>

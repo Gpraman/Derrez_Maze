@@ -2,38 +2,48 @@
 <html lang="el">
 <head>
     <meta charset="utf-8">
-    <title>VR II: Neon Labyrinth</title>
+    <title>VR II: Data Shards - The Memory Maze</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         // Ο ΧΑΡΤΗΣ ΤΟΥ ΛΑΒΥΡΙΝΘΟΥ (Δισδιάστατος Πίνακας)
-        // 1 = Τοίχος, 0 = Διάδρομος, 2 = Η Έξοδος
+        // 1 = Τοίχος, 0 = Διάδρομος
+        // 2 = Exit (εμφανίζεται στο τέλος), 3,4,5 = Data Shards (Κρύσταλλοι)
         const MAP = [
             [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-            [1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 2, 1],
+            [1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1],
             [1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 1],
-            [1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 1],
+            [1, 3, 1, 0, 0, 0, 1, 0, 0, 1, 5, 1],
             [1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1],
-            [1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1],
+            [1, 0, 0, 0, 2, 0, 0, 0, 0, 1, 0, 1],
             [1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 0, 1],
             [1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1],
             [1, 0, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1],
-            [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+            [1, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
             [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
         ];
 
-        const CELL_SIZE = 4; // Το μέγεθος κάθε "κουτιού" στον χώρο
+        const CELL_SIZE = 4; // Μέγεθος κουτιού
+        const SHARD_COLORS = ["#ff0055", "#00ffff", "#ffff00", "#00ff00"]; // Ροζ, Γαλάζιο, Κίτρινο, Πράσινο
 
-        // Ο ΔΙΚΟΣ ΜΑΣ ΚΑΤΑΣΚΕΥΑΣΤΗΣ ΛΑΒΥΡΙΝΘΟΥ ΚΑΙ ΕΛΕΓΚΤΗΣ ΚΙΝΗΣΗΣ
-        AFRAME.registerComponent('neon-maze', {
+        // Ο ΠΡΩΤΟΤΥΠΟΣ ΚΩΔΙΚΑΣ ΛΟΓΙΚΗΣ (COMPONENT)
+        AFRAME.registerComponent('data-shard-maze', {
             init: function () {
                 this.player = document.querySelector('#camera');
                 this.messageUI = document.querySelector('#hud-message');
+                this.invUI = document.querySelector('#hud-inv');
+                this.floor = document.querySelector('#floor-grid');
+                this.walls = [];
+                this.shards = {};
+                this.exitEl = null;
                 this.lastPos = new THREE.Vector3();
+                
+                this.shardsCollected = 0;
+                this.totalShards = 3;
                 this.won = false;
 
                 let mazeEl = this.el;
 
-                // Δημιουργία των 3D αντικειμένων βάσει του πίνακα MAP
+                // Δημιουργία Λαβύρινθου
                 for (let z = 0; z < MAP.length; z++) {
                     for (let x = 0; x < MAP[z].length; x++) {
                         let type = MAP[z][x];
@@ -41,91 +51,141 @@
                         let pz = z * CELL_SIZE;
 
                         if (type === 1) {
-                            // Τοίχος (Neon Pink Wireframe)
+                            // Τοίχοι (Neon Wireframe)
                             let wall = document.createElement('a-box');
                             wall.setAttribute('position', `${px} 2 ${pz}`);
                             wall.setAttribute('width', CELL_SIZE);
                             wall.setAttribute('height', 4);
                             wall.setAttribute('depth', CELL_SIZE);
-                            wall.setAttribute('color', '#ff0055');
+                            wall.setAttribute('color', SHARD_COLORS[0]); // Ξεκινάει με Ροζ
                             wall.setAttribute('wireframe', 'true');
                             mazeEl.appendChild(wall);
+                            this.walls.push(wall);
                         } else if (type === 2) {
-                            // Έξοδος (Φωτεινός Κύλινδρος)
-                            let exit = document.createElement('a-cylinder');
-                            exit.setAttribute('position', `${px} 2 ${pz}`);
-                            exit.setAttribute('radius', 1);
-                            exit.setAttribute('height', 4);
-                            exit.setAttribute('color', '#00ffff');
-                            exit.setAttribute('wireframe', 'true');
-                            exit.setAttribute('animation', 'property: rotation; to: 0 360 0; loop: true; dur: 3000');
-                            mazeEl.appendChild(exit);
-
-                            // Προσθήκη φωτός στην έξοδο
-                            let glow = document.createElement('a-light');
-                            glow.setAttribute('type', 'point');
-                            glow.setAttribute('color', '#00ffff');
-                            glow.setAttribute('intensity', '2');
-                            glow.setAttribute('distance', '10');
-                            exit.appendChild(glow);
+                            // Η Κρυφή Έξοδος
+                            this.exitEl = document.createElement('a-entity');
+                            this.exitEl.setAttribute('position', `${px} 0 ${pz}`);
+                            this.exitEl.setAttribute('visible', 'false'); // Αρχικά αόρατη
+                            
+                            let exitCylinder = document.createElement('a-cylinder');
+                            exitCylinder.setAttribute('radius', 1.5);
+                            exitCylinder.setAttribute('height', 10);
+                            exitCylinder.setAttribute('color', SHARD_COLORS[3]); // Πράσινο τέλος
+                            exitCylinder.setAttribute('wireframe', 'true');
+                            exitCylinder.setAttribute('animation', 'property: rotation; to: 0 360 0; loop: true; dur: 2000');
+                            this.exitEl.appendChild(exitCylinder);
+                            mazeEl.appendChild(this.exitEl);
+                        } else if (type >= 3 && type <= 5) {
+                            // Τα Θραύσματα Δεδομένων (Shards)
+                            let shard = document.createElement('a-octahedron');
+                            shard.setAttribute('position', `${px} 1.6 ${pz}`);
+                            shard.setAttribute('color', SHARD_COLORS[this.shardsCollected + 1]);
+                            shard.setAttribute('radius', 0.8);
+                            shard.setAttribute('wireframe', 'true');
+                            shard.setAttribute('animation', 'property: rotation; to: 360 360 0; loop: true; dur: 3000');
+                            mazeEl.appendChild(shard);
+                            this.shards[type] = shard; // Αποθήκευση αναφοράς
                         }
                     }
                 }
 
-                // Τοποθέτηση του παίκτη στην αφετηρία (Κάτω αριστερά γωνία)
+                // Τοποθέτηση παίκτη
                 this.player.setAttribute('position', `4 1.6 ${(MAP.length - 2) * CELL_SIZE}`);
                 this.lastPos.copy(this.player.getAttribute('position'));
+                this.updateUI();
             },
 
             tick: function () {
                 if (this.won) return;
 
-                // Σύστημα Αποτροπής Προσκρούσεων (Απλό Collision)
                 let pos = this.player.getAttribute('position');
-                
-                // Υπολογισμός του τετραγώνου στο οποίο βρίσκεται ο παίκτης
                 let gridX = Math.round(pos.x / CELL_SIZE);
                 let gridZ = Math.round(pos.z / CELL_SIZE);
 
-                // Ασφάλεια ελέγχου ορίων χάρτη
                 if (gridZ >= 0 && gridZ < MAP.length && gridX >= 0 && gridX < MAP[0].length) {
-                    
-                    // Αν ο παίκτης ακουμπήσει την Έξοδο
-                    if (MAP[gridZ][gridX] === 2) {
-                        this.won = true;
-                        this.messageUI.innerText = "ΕΞΟΔΟΣ ΕΝΤΟΠΙΣΤΗΚΕ!\nΣΥΓΧΑΡΗΤΗΡΙΑ";
-                        this.messageUI.style.color = "#00ffff";
-                        this.messageUI.style.borderColor = "#00ffff";
+                    let tileType = MAP[gridZ][gridX];
+
+                    // Έλεγχος Συλλογής Shard
+                    if (tileType >= 3 && tileType <= 5) {
+                        this.collectShard(tileType, gridX, gridZ);
                         return;
                     }
 
-                    // Αν ο παίκτης προσπαθήσει να μπει σε Τοίχο
-                    if (MAP[gridZ][gridX] === 1) {
-                        // Επαναφορά στην προηγούμενη ασφαλή θέση (Bouncing)
+                    // Έλεγχος Τερματισμού (Μόνο αν μαζευτούν όλα)
+                    if (tileType === 2 && this.shardsCollected === this.totalShards) {
+                        this.winGame();
+                        return;
+                    }
+
+                    // Collision Detection (Πρόσκρουση σε τοίχο)
+                    if (tileType === 1) {
                         this.player.setAttribute('position', this.lastPos);
                     } else {
-                        // Αποθήκευση της τρέχουσας ασφαλούς θέσης
                         this.lastPos.copy(pos);
                     }
                 } else {
                     this.lastPos.copy(pos);
                 }
+            },
+
+            collectShard: function(type, x, z) {
+                // Αφαίρεση από τον χάρτη και το 3D scene
+                MAP[z][x] = 0; 
+                if (this.shards[type]) {
+                    this.el.removeChild(this.shards[type]);
+                    delete this.shards[type];
+                }
+                
+                this.shardsCollected++;
+                
+                // ΠΡΩΤΟΤΥΠΟ: Αλλαγή χρώματος ολόκληρου του λαβύρινθου!
+                let newColor = SHARD_COLORS[this.shardsCollected];
+                this.walls.forEach(wall => wall.setAttribute('color', newColor));
+                this.floor.setAttribute('color', newColor);
+
+                this.updateUI();
+
+                if (this.shardsCollected === this.totalShards) {
+                    this.messageUI.innerText = "ΟΛΑ ΤΑ ΘΡΑΥΣΜΑΤΑ ΣΥΛΛΕΧΘΗΚΑΝ!\nΗ ΕΞΟΔΟΣ ΑΝΟΙΞΕ ΣΤΟ ΚΕΝΤΡΟ";
+                    this.messageUI.style.color = "#ffffff";
+                    // Εμφάνιση της εξόδου
+                    if (this.exitEl) this.exitEl.setAttribute('visible', 'true');
+                } else {
+                    this.messageUI.innerText = "ΘΡΑΥΣΜΑ ΔΕΔΟΜΕΝΩΝ ΑΝΑΚΤΗΘΗΚΕ";
+                    setTimeout(() => { if(!this.won) this.messageUI.innerText = "ΕΞΕΡΕΥΝΗΣΕ ΤΟ ΔΙΚΤΥΟ"; }, 2000);
+                }
+            },
+
+            updateUI: function() {
+                this.invUI.innerText = `ΑΝΑΜΝΗΣΕΙΣ: ${this.shardsCollected} / ${this.totalShards}`;
+            },
+
+            winGame: function() {
+                this.won = true;
+                this.messageUI.innerText = "ΔΙΚΤΥΟ ΑΠΟΚΑΤΑΣΤΑΘΗΚΕ!\nΣΥΓΧΑΡΗΤΗΡΙΑ";
+                this.messageUI.style.color = SHARD_COLORS[3];
+                this.messageUI.style.borderColor = SHARD_COLORS[3];
+                this.el.setAttribute('background', 'color: #00ff00');
             }
         });
     </script>
 </head>
 <body style="margin: 0; overflow: hidden; background-color: #000;">
 
-    <div style="position: absolute; top: 10%; left: 0; width: 100%; text-align: center; z-index: 100; pointer-events: none;">
-        <div id="hud-message" style="color: #ff0055; font-family: 'Courier New', Courier, monospace; font-size: 1.5rem; text-shadow: 2px 2px 0px #000; background: rgba(0, 0, 0, 0.8); display: inline-block; padding: 15px 30px; border-radius: 8px; border: 2px solid #ff0055; white-space: pre-line; text-transform: uppercase;">
-            ΒΡΕΣ ΤΗΝ ΕΞΟΔΟ
+    <div style="position: absolute; top: 8%; left: 0; width: 100%; text-align: center; z-index: 100; pointer-events: none;">
+        <div id="hud-message" style="color: #ffffff; font-family: 'Courier New', Courier, monospace; font-size: 1.4rem; text-shadow: 2px 2px 0px #000; background: rgba(0, 0, 0, 0.7); display: inline-block; padding: 10px 20px; border-radius: 5px; border: 1px solid #ffffff; white-space: pre-line; text-transform: uppercase; margin-bottom: 10px;">
+            ΕΞΕΡΕΥΝΗΣΕ ΤΟ ΔΙΚΤΥΟ
+        </div>
+        <br>
+        <div id="hud-inv" style="color: #ff0055; font-family: 'Courier New', Courier, monospace; font-size: 1.2rem; font-weight: bold; background: rgba(0, 0, 0, 0.7); display: inline-block; padding: 8px 15px; border-radius: 5px; border: 1px solid #ff0055;">
+            ΑΝΑΜΝΗΣΕΙΣ: 0 / 3
         </div>
     </div>
 
-    <a-scene neon-maze background="color: #050505">
+    <a-scene data-shard-maze background="color: #050505">
         <a-light type="ambient" intensity="0.3" color="#444466"></a-light>
         
-        <a-plane position="20 0 20" rotation="-90 0 0" width="100" height="100" color="#111122" wireframe="true"></a-plane>
+        <a-plane id="floor-grid" position="20 0 20" rotation="-90 0 0" width="100" height="100" color="#ff0055" wireframe="true"></a-plane>
 
         <a-entity id="camera" camera look-controls wasd-controls="acceleration: 20"></a-entity>
     </a-scene>

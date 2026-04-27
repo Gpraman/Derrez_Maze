@@ -2,11 +2,12 @@
 <html lang="el">
 <head>
     <meta charset="utf-8">
-    <title>VR II: The Grid - Audio Edition</title>
+    <title>VR II: The Grid - TRON Legacy Edition</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         const CELL_SIZE = 4;
         
+        // TRON Χρωματική Παλέτα
         const TRON_COLORS = {
             heroCyan: '#00FFFF',
             enemyOrange: '#FF4500',
@@ -15,7 +16,7 @@
             skyBlack: '#000000'
         };
 
-        // --- ΜΗΧΑΝΗ ΗΧΟΥ (Web Audio API Synthesizer) ---
+        // ΜΗΧΑΝΗ ΗΧΟΥ (Για τα εφέ του παιχνιδιού)
         const SoundEngine = {
             ctx: null,
             init: function() {
@@ -33,7 +34,6 @@
                 osc.type = type;
                 osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
                 
-                // Envelope (Απαλό σβήσιμο του ήχου)
                 gain.gain.setValueAtTime(vol, this.ctx.currentTime);
                 gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
                 
@@ -44,20 +44,18 @@
             },
             playDiscCollect: function() {
                 this.init();
-                // Διπλός ψηφιακός ήχος (High Ping)
-                this.playTone(880, 'sine', 0.2, 0.3); // A5
-                setTimeout(() => this.playTone(1760, 'sine', 0.4, 0.3), 100); // A6
+                this.playTone(880, 'sine', 0.2, 0.3); 
+                setTimeout(() => this.playTone(1760, 'sine', 0.4, 0.3), 100); 
             },
             playPortalOpen: function() {
                 this.init();
-                // Βαρύς ήχος που ανεβαίνει (Siren/Riser)
                 if (!this.ctx) return;
                 let osc = this.ctx.createOscillator();
                 let gain = this.ctx.createGain();
                 osc.type = 'sawtooth';
                 
                 osc.frequency.setValueAtTime(100, this.ctx.currentTime);
-                osc.frequency.linearRampToValueAtTime(600, this.ctx.currentTime + 2); // Ανεβαίνει η συχνότητα
+                osc.frequency.linearRampToValueAtTime(600, this.ctx.currentTime + 2); 
                 
                 gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
                 gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 3);
@@ -87,12 +85,14 @@
                 this.enemyColorObj = new THREE.Color(TRON_COLORS.enemyOrange);
                 this.activeWallColor = this.heroColorObj;
                 
-                // Ξεκλείδωμα ήχου με το πρώτο κλικ (Κανόνας των Browsers)
+                // Ενεργοποίηση Ήχων και Μουσικής (music.mp3) με το πρώτο κλικ
                 window.addEventListener('click', () => {
                     SoundEngine.init();
-                    // Προαιρετικά: Αν έχεις ένα MP3 αρχείο, μπορείς να το κάνεις play εδώ
                     let bgm = document.querySelector('#bgm');
-                    if(bgm && bgm.paused) bgm.play();
+                    if(bgm && bgm.paused) {
+                        bgm.volume = 0.5; // Ρύθμιση έντασης μουσικής στο 50%
+                        bgm.play().catch(e => console.log("Audio play failed:", e));
+                    }
                 }, {once:true});
 
                 this.loadLevel(this.currentLevel);
@@ -201,7 +201,7 @@
                 
                 this.floor.setAttribute('color', TRON_COLORS.gridBlue);
                 this.levelUI.innerText = `SECTOR: ${this.currentLevel} / ${this.maxLevels}`;
-                this.messageUI.innerText = "ΚΑΝΕ ΚΛΙΚ ΣΤΗΝ ΟΘΟΝΗ\nΓΙΑ ΝΑ ΕΝΕΡΓΟΠΟΙΗΣΕΙΣ ΤΟΝ ΗΧΟ";
+                this.messageUI.innerText = "ΚΑΝΕ ΚΛΙΚ ΓΙΑ ΕΝΕΡΓΟΠΟΙΗΣΗ ΣΥΣΤΗΜΑΤΟΣ";
                 this.messageUI.style.color = TRON_COLORS.dataWhite;
                 this.messageUI.style.borderColor = TRON_COLORS.heroCyan;
                 this.updateUI();
@@ -214,6 +214,7 @@
                 let gridX = Math.round(pos.x / CELL_SIZE);
                 let gridZ = Math.round(pos.z / CELL_SIZE);
 
+                // --- REZZING SYSTEM ---
                 let rezRadius = 16; 
                 this.walls.forEach(wall => {
                     let mesh = wall.getObject3D('mesh');
@@ -227,6 +228,7 @@
                     }
                 });
 
+                // --- STEALTH DISCS ---
                 let visibilityRadius = 5; 
                 this.shards.forEach(shard => {
                     if (shard.parentNode) {
@@ -239,6 +241,7 @@
                     }
                 });
 
+                // --- MOVEMENT & COLLISION ---
                 if (gridZ >= 0 && gridZ < this.currentMap.length && gridX >= 0 && gridX < this.currentMap[0].length) {
                     let tileType = this.currentMap[gridZ][gridX];
 
@@ -266,7 +269,6 @@
                 this.currentMap[z][x] = 0; 
                 this.shardsCollected++;
                 
-                // Παίζουμε τον ήχο συλλογής
                 SoundEngine.playDiscCollect();
 
                 let shardToRemove = this.shards.find(s => s.gridPos.x === x && s.gridPos.z === z);
@@ -277,7 +279,6 @@
                 this.updateUI();
 
                 if (this.shardsCollected === this.totalShards) {
-                    // Παίζουμε τον ήχο του Portal
                     SoundEngine.playPortalOpen();
 
                     this.messageUI.innerText = "PORTAL ΕΝΕΡΓΟΠΟΙΗΘΗΚΕ!";
@@ -317,6 +318,8 @@
 </head>
 <body style="margin: 0; overflow: hidden; background-color: #000;">
 
+    <audio id="bgm" src="music.mp3" loop="true" preload="auto"></audio> 
+
     <div style="position: absolute; top: 5%; left: 0; width: 100%; text-align: center; z-index: 100; pointer-events: none;">
         <div id="hud-level" style="color: #FFD700; font-family: 'Courier New', Courier, monospace; font-size: 1.5rem; font-weight: bold; background: rgba(0, 0, 0, 0.9); display: inline-block; padding: 5px 15px; border-radius: 2px; margin-bottom: 5px; border: 1px solid #FFD700; text-transform: uppercase;">
             SECTOR: 1 / 10
@@ -335,6 +338,7 @@
         <a-light type="ambient" intensity="0.2" color="#444466"></a-light>
         <a-plane id="floor-grid" position="50 0 50" rotation="-90 0 0" width="300" height="300" color="#0000FF" wireframe="true" wireframe-linewidth="1" material="shader: flat"></a-plane>
         <a-entity id="maze-container"></a-entity>
+
         <a-entity id="camera" camera look-controls wasd-controls="acceleration: 25">
             <a-light type="point" intensity="0.5" distance="10" color="#00FFFF" position="0 0 -1"></a-light>
         </a-entity>

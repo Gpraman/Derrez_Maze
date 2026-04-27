@@ -2,22 +2,19 @@
 <html lang="el">
 <head>
     <meta charset="utf-8">
-    <title>VR II: The Grid - TRON Legacy Edition</title>
+    <title>VR II: The Grid - Reactive Rezzing</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         const CELL_SIZE = 4;
         
         // TRON Χρωματική Παλέτα
         const TRON_COLORS = {
-            heroCyan: '#00FFFF',    // Sam Flynn Cyan
-            enemyOrange: '#FF4500', // Clu/Rinzler Orange-Red
-            dataWhite: '#FFFFFF',   // Data Pulse
-            gridBlue: '#0000FF',    // Floor Grid Blue
-            skyBlack: '#000000'     // Abyss Black
+            heroCyan: '#00FFFF',
+            enemyOrange: '#FF4500',
+            dataWhite: '#FFFFFF',
+            gridBlue: '#0000FF',
+            skyBlack: '#000000'
         };
-
-        // Παλέτα εξέλιξης λαβύρινθου (Cyan -> Orange)
-        const MAZE_PROGRESSION_COLORS = [TRON_COLORS.heroCyan, TRON_COLORS.enemyOrange];
 
         AFRAME.registerComponent('procedural-maze', {
             init: function () {
@@ -32,6 +29,11 @@
                 this.maxLevels = 10;
                 this.lastPos = new THREE.Vector3();
                 this.wonGame = false;
+                
+                // Δημιουργούμε τα χρώματα σε μορφή THREE.Color για ταχύτατη επεξεργασία (Performance boost)
+                this.heroColorObj = new THREE.Color(TRON_COLORS.heroCyan);
+                this.enemyColorObj = new THREE.Color(TRON_COLORS.enemyOrange);
+                this.activeWallColor = this.heroColorObj;
                 
                 this.loadLevel(this.currentLevel);
             },
@@ -60,6 +62,7 @@
                 this.exitEl = null;
                 this.shardsCollected = 0;
                 this.levelWon = false;
+                this.activeWallColor = this.heroColorObj; // Επαναφορά σε Cyan
 
                 let mapSize = 7 + (level * 2); 
                 this.totalShards = 2 + Math.floor(level / 2); 
@@ -75,30 +78,26 @@
                 }
                 emptySpots = emptySpots.sort(() => Math.random() - 0.5); 
 
-                // Αρχικό TRON Cyan χρώμα για τους τοίχους
-                let startWallColor = TRON_COLORS.heroCyan;
-
                 for (let z = 0; z < mapSize; z++) {
                     for (let x = 0; x < mapSize; x++) {
                         let px = x * CELL_SIZE;
                         let pz = z * CELL_SIZE;
 
                         if (this.currentMap[z][x] === 1) {
-                            // Τοίχοι: TRON 'Solid Light' look
                             let wall = document.createElement('a-box');
                             wall.setAttribute('position', `${px} 2 ${pz}`);
                             wall.setAttribute('width', CELL_SIZE);
                             wall.setAttribute('height', 4);
                             wall.setAttribute('depth', CELL_SIZE);
-                            // TRON Αισθητική: Μαύρος τοίχος με Cyan wireframe
-                            wall.setAttribute('material', `color: ${TRON_COLORS.skyBlack}; emissive: ${startWallColor}; emissiveIntensity: 0.5; wireframe: true; wireframeLinewidth: 2`);
+                            // Ορίζουμε transparent:true ώστε το υλικό να μπορεί να γίνει αόρατο δυναμικά
+                            wall.setAttribute('material', `color: ${TRON_COLORS.skyBlack}; wireframe: true; transparent: true; opacity: 0.05`);
                             this.mazeContainer.appendChild(wall);
                             this.walls.push(wall);
                         }
                     }
                 }
 
-                // Τοποθέτηση Shards ως Identity Discs
+                // Τοποθέτηση Discs
                 for (let i = 0; i < this.totalShards; i++) {
                     let spot = emptySpots.pop();
                     this.currentMap[spot.z][spot.x] = 3; 
@@ -106,17 +105,14 @@
                     let discEntity = document.createElement('a-entity');
                     discEntity.setAttribute('position', `${spot.x * CELL_SIZE} 1.6 ${spot.z * CELL_SIZE}`);
                     discEntity.setAttribute('animation', 'property: rotation; to: 0 360 0; loop: true; dur: 1000; easing: linear');
-                    discEntity.setAttribute('visible', 'false'); // Stealth Proximity
+                    discEntity.setAttribute('visible', 'false'); 
 
-                    // Identity Disc geometry (Torus)
                     let disc = document.createElement('a-torus');
                     disc.setAttribute('radius', 0.5);
                     disc.setAttribute('radius-tubular', 0.05);
                     disc.setAttribute('color', TRON_COLORS.dataWhite);
                     disc.setAttribute('material', `emissive: ${TRON_COLORS.heroCyan}; emissiveIntensity: 2; shader: flat`);
-                    disc.setAttribute('rotation', '90 0 0'); // Horizontal orientation
-                    
-                    // Add a pulse animation
+                    disc.setAttribute('rotation', '90 0 0'); 
                     disc.setAttribute('animation__pulse', 'property: scale; from: 1 1 1; to: 1.1 1.1 1.1; dur: 500; dir: alternate; loop: true');
 
                     discEntity.appendChild(disc);
@@ -125,21 +121,20 @@
                     this.shards.push(discEntity);
                 }
 
-                // TRON Portal Exit (Κάθετη δέσμη λευκού φωτός)
+                // The Portal
                 let exitSpot = emptySpots.pop();
                 this.currentMap[exitSpot.z][exitSpot.x] = 2; 
                 this.exitEl = document.createElement('a-cylinder');
-                this.exitEl.setAttribute('position', `${exitSpot.x * CELL_SIZE} 10 ${exitSpot.z * CELL_SIZE}`); // High pillar
+                this.exitEl.setAttribute('position', `${exitSpot.x * CELL_SIZE} 10 ${exitSpot.z * CELL_SIZE}`); 
                 this.exitEl.setAttribute('radius', 1);
                 this.exitEl.setAttribute('height', 20);
-                this.exitEl.setAttribute('material', `color: ${TRON_COLORS.dataWhite}; emissive: ${TRON_COLORS.heroCyan}; emissiveIntensity: 5; shader: flat; opacity: 0.7; transparent: true`);
+                this.exitEl.setAttribute('material', `color: ${TRON_COLORS.dataWhite}; emissive: ${TRON_COLORS.enemyOrange}; emissiveIntensity: 5; shader: flat; opacity: 0.7; transparent: true`);
                 this.exitEl.setAttribute('visible', 'false'); 
                 this.mazeContainer.appendChild(this.exitEl);
 
-                // Add a light to the exit
                 let exitLight = document.createElement('a-light');
                 exitLight.setAttribute('type', 'point');
-                exitLight.setAttribute('color', TRON_COLORS.dataWhite);
+                exitLight.setAttribute('color', TRON_COLORS.enemyOrange);
                 exitLight.setAttribute('intensity', 3);
                 exitLight.setAttribute('distance', 15);
                 this.exitEl.appendChild(exitLight);
@@ -147,9 +142,8 @@
                 this.player.setAttribute('position', `${1 * CELL_SIZE} 1.6 ${1 * CELL_SIZE}`);
                 this.lastPos.copy(this.player.getAttribute('position'));
                 
-                // Floor: TRON Blue Grid
                 this.floor.setAttribute('color', TRON_COLORS.gridBlue);
-                this.levelUI.innerText = `ΕΠΙΠΕΔΟ: ${this.currentLevel} / ${this.maxLevels}`;
+                this.levelUI.innerText = `SECTOR: ${this.currentLevel} / ${this.maxLevels}`;
                 this.messageUI.innerText = "ΑΝΑΚΤΗΣΕ ΤΑ ΔΕΔΟΜΕΝΑ";
                 this.messageUI.style.color = TRON_COLORS.dataWhite;
                 this.messageUI.style.borderColor = TRON_COLORS.heroCyan;
@@ -163,7 +157,24 @@
                 let gridX = Math.round(pos.x / CELL_SIZE);
                 let gridZ = Math.round(pos.z / CELL_SIZE);
 
-                // TRON Stealth: Τα discs εμφανίζονται μόνο από ΠΟΛΥ κοντά (Απόσταση 5)
+                // --- REZZING SYSTEM (Η Υλοποίηση των Τοίχων) ---
+                let rezRadius = 16; // Πόσο μακριά φωτίζονται οι τοίχοι
+                this.walls.forEach(wall => {
+                    let mesh = wall.getObject3D('mesh');
+                    if (mesh && mesh.material) {
+                        let dist = pos.distanceTo(wall.object3D.position);
+                        // Υπολογισμός έντασης βάσει απόστασης (1 = κοντά, 0 = μακριά)
+                        let intensity = Math.max(0.0, 1 - (dist / rezRadius));
+                        
+                        // Αλλάζουμε τις ιδιότητες του υλικού απευθείας για κορυφαία απόδοση
+                        mesh.material.emissive = this.activeWallColor;
+                        mesh.material.emissiveIntensity = intensity * 2;
+                        // Κρατάμε ένα 5% ορατότητα από μακριά για να μη νιώθει ο παίκτης ότι είναι στο κενό
+                        mesh.material.opacity = Math.max(0.05, intensity); 
+                    }
+                });
+
+                // --- STEALTH DISCS ---
                 let visibilityRadius = 5; 
                 this.shards.forEach(shard => {
                     if (shard.parentNode) {
@@ -176,6 +187,7 @@
                     }
                 });
 
+                // --- MOVEMENT & COLLISION ---
                 if (gridZ >= 0 && gridZ < this.currentMap.length && gridX >= 0 && gridX < this.currentMap[0].length) {
                     let tileType = this.currentMap[gridZ][gridX];
 
@@ -211,16 +223,15 @@
                 this.updateUI();
 
                 if (this.shardsCollected === this.totalShards) {
-                    // Όταν βρεθούν όλα, το περιβάλλον γίνεται Orange (Clu look) και εμφανίζεται το Portal
                     this.messageUI.innerText = "PORTAL ΕΝΕΡΓΟΠΟΙΗΘΗΚΕ!";
                     this.messageUI.style.color = TRON_COLORS.enemyOrange;
                     this.messageUI.style.borderColor = TRON_COLORS.enemyOrange;
                     this.exitEl.setAttribute('visible', 'true');
-                    this.walls.forEach(wall => wall.setAttribute('material', `color: ${TRON_COLORS.skyBlack}; emissive: ${TRON_COLORS.enemyOrange}; emissiveIntensity: 1; wireframe: true`));
+                    
+                    // Αλλάζουμε το χρώμα υλοποίησης των τοίχων σε Πορτοκαλί (Συναγερμός)
+                    this.activeWallColor = this.enemyColorObj;
                     this.floor.setAttribute('color', TRON_COLORS.enemyOrange);
                 } else {
-                    // Αλλαγή Χρώματος (Αναλόγως της προόδου - TRON Cyan)
-                    this.walls.forEach(wall => wall.setAttribute('material', `color: ${TRON_COLORS.skyBlack}; emissive: ${TRON_COLORS.heroCyan}; emissiveIntensity: 0.8; wireframe: true`));
                     this.messageUI.innerText = "ΔΕΔΟΜΕΝΑ ΕΝΣΩΜΑΤΩΘΗΚΑΝ";
                     setTimeout(() => { if(!this.levelWon) this.messageUI.innerText = "ΨΑΞΕ ΣΤΟ 'GRID'..."; }, 1500);
                 }
@@ -228,8 +239,6 @@
 
             updateUI: function() {
                 this.invUI.innerText = `DISCS: ${this.shardsCollected} / ${this.totalShards}`;
-                this.invUI.style.color = TRON_COLORS.heroCyan;
-                this.invUI.style.borderColor = TRON_COLORS.heroCyan;
             },
 
             nextLevel: function() {
@@ -241,7 +250,6 @@
                     this.messageUI.style.borderColor = TRON_COLORS.heroCyan;
                     this.invUI.style.display = 'none';
                     this.levelUI.style.display = 'none';
-                    this.el.setAttribute('background', `color: ${TRON_COLORS.heroCyan}`);
                 } else {
                     this.messageUI.innerText = "ΠΟΡΤΑΛ ΑΝΟΙΧΤΟ!\nΜΕΤΑΦΟΡΑ ΣΕ ΝΕΟ ΤΟΜΕΑ...";
                     this.currentLevel++;
@@ -268,15 +276,12 @@
     </div>
 
     <a-scene procedural-maze background="color: #000000" fog="type: exponential; color: #000000; density: 0.03;">
-        
         <a-light type="ambient" intensity="0.2" color="#444466"></a-light>
-        
         <a-plane id="floor-grid" position="50 0 50" rotation="-90 0 0" width="300" height="300" color="#0000FF" wireframe="true" wireframe-linewidth="1" material="shader: flat"></a-plane>
-
         <a-entity id="maze-container"></a-entity>
 
         <a-entity id="camera" camera look-controls wasd-controls="acceleration: 25">
-            <a-light type="point" intensity="1" distance="15" color="#00FFFF" position="0 0 -1"></a-light>
+            <a-light type="point" intensity="0.5" distance="10" color="#00FFFF" position="0 0 -1"></a-light>
         </a-entity>
     </a-scene>
 

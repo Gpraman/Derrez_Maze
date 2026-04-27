@@ -1,225 +1,134 @@
 <!DOCTYPE html>
-<html>
+<html lang="el">
 <head>
     <meta charset="utf-8">
-    <title>VR II: Σφάλμα Μνήμης</title>
+    <title>VR II: Neon Labyrinth</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
+        // Ο ΧΑΡΤΗΣ ΤΟΥ ΛΑΒΥΡΙΝΘΟΥ (Δισδιάστατος Πίνακας)
+        // 1 = Τοίχος, 0 = Διάδρομος, 2 = Η Έξοδος
         const MAP = [
-            [0, 5, 6],
-            [2, 1, 0],
-            [0, 3, 4]
+            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            [1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 2, 1],
+            [1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 1],
+            [1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 1],
+            [1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1],
+            [1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1],
+            [1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 0, 1],
+            [1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1],
+            [1, 0, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1],
+            [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
         ];
 
-        const TEXT = [
-            'Εκκίνηση... Τομέας 0:\nΕντοπίστηκαν σφάλματα.',
-            'Κατεστραμμένη Πύλη:\nΑπαιτείται "Κλειδί_Συστήματος.exe"',
-            'Υπερχείλιση Μνήμης.\nΤο Firewall παρακολουθεί...',
-            'Θύρα 8080:\nΗ έξοδος στο Δίκτυο. Είσαι έτοιμος;',
-            'Διαγραμμένος Κώδικας:\n"Βοήθησέ με να επαναφερθώ..."',
-            'Ο Πυρήνας.\nΑναμονή για Δικαιώματα Διαχειριστή...'
-        ];
+        const CELL_SIZE = 4; // Το μέγεθος κάθε "κουτιού" στον χώρο
 
-        AFRAME.registerComponent('game-logic', {
+        // Ο ΔΙΚΟΣ ΜΑΣ ΚΑΤΑΣΚΕΥΑΣΤΗΣ ΛΑΒΥΡΙΝΘΟΥ ΚΑΙ ΕΛΕΓΚΤΗΣ ΚΙΝΗΣΗΣ
+        AFRAME.registerComponent('neon-maze', {
             init: function () {
-                this.currentScene = 1;
-                this.inventory = ['Κλειδί_Συστήματος.exe'];
+                this.player = document.querySelector('#camera');
+                this.messageUI = document.querySelector('#hud-message');
+                this.lastPos = new THREE.Vector3();
+                this.won = false;
+
+                let mazeEl = this.el;
+
+                // Δημιουργία των 3D αντικειμένων βάσει του πίνακα MAP
+                for (let z = 0; z < MAP.length; z++) {
+                    for (let x = 0; x < MAP[z].length; x++) {
+                        let type = MAP[z][x];
+                        let px = x * CELL_SIZE;
+                        let pz = z * CELL_SIZE;
+
+                        if (type === 1) {
+                            // Τοίχος (Neon Pink Wireframe)
+                            let wall = document.createElement('a-box');
+                            wall.setAttribute('position', `${px} 2 ${pz}`);
+                            wall.setAttribute('width', CELL_SIZE);
+                            wall.setAttribute('height', 4);
+                            wall.setAttribute('depth', CELL_SIZE);
+                            wall.setAttribute('color', '#ff0055');
+                            wall.setAttribute('wireframe', 'true');
+                            mazeEl.appendChild(wall);
+                        } else if (type === 2) {
+                            // Έξοδος (Φωτεινός Κύλινδρος)
+                            let exit = document.createElement('a-cylinder');
+                            exit.setAttribute('position', `${px} 2 ${pz}`);
+                            exit.setAttribute('radius', 1);
+                            exit.setAttribute('height', 4);
+                            exit.setAttribute('color', '#00ffff');
+                            exit.setAttribute('wireframe', 'true');
+                            exit.setAttribute('animation', 'property: rotation; to: 0 360 0; loop: true; dur: 3000');
+                            mazeEl.appendChild(exit);
+
+                            // Προσθήκη φωτός στην έξοδο
+                            let glow = document.createElement('a-light');
+                            glow.setAttribute('type', 'point');
+                            glow.setAttribute('color', '#00ffff');
+                            glow.setAttribute('intensity', '2');
+                            glow.setAttribute('distance', '10');
+                            exit.appendChild(glow);
+                        }
+                    }
+                }
+
+                // Τοποθέτηση του παίκτη στην αφετηρία (Κάτω αριστερά γωνία)
+                this.player.setAttribute('position', `4 1.6 ${(MAP.length - 2) * CELL_SIZE}`);
+                this.lastPos.copy(this.player.getAttribute('position'));
+            },
+
+            tick: function () {
+                if (this.won) return;
+
+                // Σύστημα Αποτροπής Προσκρούσεων (Απλό Collision)
+                let pos = this.player.getAttribute('position');
                 
-                // ΔΙΟΡΘΩΣΗ: Περιμένουμε να φορτώσει η σκηνή για να μην κρασάρει
-                let sceneEl = document.querySelector('a-scene');
-                if (sceneEl.hasLoaded) {
-                    this.setupGame();
-                } else {
-                    sceneEl.addEventListener('loaded', () => this.setupGame());
-                }
-            },
+                // Υπολογισμός του τετραγώνου στο οποίο βρίσκεται ο παίκτης
+                let gridX = Math.round(pos.x / CELL_SIZE);
+                let gridZ = Math.round(pos.z / CELL_SIZE);
 
-            setupGame: function() {
-                const directions = ['north', 'south', 'east', 'west'];
-                directions.forEach(dir => {
-                    const cone = document.querySelector('#' + dir);
-                    if (cone) cone.addEventListener('click', () => this.move(dir));
-                });
-
-                document.querySelectorAll('.object').forEach(el => {
-                    el.addEventListener('click', (e) => this.interact(e.target));
-                });
-
-                this.updateScene();
-            },
-
-            getCoords: function(sceneId) {
-                for (let y = 0; y < 3; y++) {
-                    for (let x = 0; x < 3; x++) {
-                        if (MAP[y][x] === sceneId) return { x, y };
-                    }
-                }
-                return null;
-            },
-
-            move: function(dir) {
-                let coords = this.getCoords(this.currentScene);
-                if (!coords) return;
-
-                let nx = coords.x;
-                let ny = coords.y;
-
-                if (dir === 'north') ny--;
-                if (dir === 'south') ny++;
-                if (dir === 'east') nx++;
-                if (dir === 'west') nx--;
-
-                if (ny >= 0 && ny < 3 && nx >= 0 && nx < 3 && MAP[ny][nx] !== 0) {
-                    this.currentScene = MAP[ny][nx];
-                    this.updateScene();
-                }
-            },
-
-            interact: function(el) {
-                let pick = el.getAttribute('pick');
-                let drop = el.getAttribute('drop');
-                let goal = el.getAttribute('goal');
-                let fail = el.getAttribute('fail');
-
-                if (drop) {
-                    if (this.inventory.includes(drop)) {
-                        this.displayText(goal || "Δεδομένα έγιναν αποδεκτά.");
-                        if (pick && !this.inventory.includes(pick)) {
-                            this.inventory.push(pick);
-                            el.setAttribute('visible', 'false');
-                            el.classList.remove('interactive', 'object');
-                        }
-                    } else {
-                        this.displayText(fail || "Σφάλμα: Λείπουν δεδομένα.");
-                    }
-                } else if (pick) {
-                    if (!this.inventory.includes(pick)) {
-                        this.inventory.push(pick);
-                        this.displayText("ΑΠΟΚΤΗΘΗΚΕ:\n" + pick);
-                        el.setAttribute('visible', 'false');
-                        el.classList.remove('interactive', 'object');
-                    }
-                }
-                setTimeout(() => this.updateScene(), 2500);
-            },
-
-            updateScene: function() {
-                document.querySelectorAll('.scene').forEach(scene => {
-                    scene.setAttribute('visible', 'false');
-                    scene.querySelectorAll('.object').forEach(obj => obj.classList.remove('interactive'));
-                });
-
-                let activeScene = document.querySelector('#scene' + this.currentScene);
-                if (activeScene) {
-                    activeScene.setAttribute('visible', 'true');
-                    activeScene.querySelectorAll('.object').forEach(obj => {
-                        if (obj.getAttribute('visible') !== 'false') {
-                            obj.classList.add('interactive');
-                        }
-                    });
-                }
-
-                let coords = this.getCoords(this.currentScene);
-                const dirs = { 'north': {x:0, y:-1}, 'south': {x:0, y:1}, 'east': {x:1, y:0}, 'west': {x:-1, y:0} };
-
-                Object.keys(dirs).forEach(dir => {
-                    let arrow = document.querySelector('#' + dir);
-                    let nx = coords.x + dirs[dir].x;
-                    let ny = coords.y + dirs[dir].y;
+                // Ασφάλεια ελέγχου ορίων χάρτη
+                if (gridZ >= 0 && gridZ < MAP.length && gridX >= 0 && gridX < MAP[0].length) {
                     
-                    if (ny >= 0 && ny < 3 && nx >= 0 && nx < 3 && MAP[ny][nx] !== 0) {
-                        arrow.setAttribute('visible', 'true');
-                        arrow.classList.add('interactive');
-                    } else {
-                        arrow.setAttribute('visible', 'false');
-                        arrow.classList.remove('interactive');
+                    // Αν ο παίκτης ακουμπήσει την Έξοδο
+                    if (MAP[gridZ][gridX] === 2) {
+                        this.won = true;
+                        this.messageUI.innerText = "ΕΞΟΔΟΣ ΕΝΤΟΠΙΣΤΗΚΕ!\nΣΥΓΧΑΡΗΤΗΡΙΑ";
+                        this.messageUI.style.color = "#00ffff";
+                        this.messageUI.style.borderColor = "#00ffff";
+                        return;
                     }
-                });
 
-                let sceneText = TEXT[this.currentScene - 1];
-                let invText = "\n\n[ ΑΠΟΘΗΚΗ ΔΕΔΟΜΕΝΩΝ: " + (this.inventory.length > 0 ? this.inventory.join(", ") : "Άδεια") + " ]";
-                this.displayText(sceneText + invText);
-            },
-
-            displayText: function(str) {
-                // Ενημέρωση του 2D HTML Text για τα Ελληνικά
-                let htmlEl = document.querySelector('#html-info');
-                if (htmlEl) {
-                    htmlEl.innerText = str;
-                    htmlEl.style.color = '#ffffff';
-                    setTimeout(() => htmlEl.style.color = '#00ff00', 150);
+                    // Αν ο παίκτης προσπαθήσει να μπει σε Τοίχο
+                    if (MAP[gridZ][gridX] === 1) {
+                        // Επαναφορά στην προηγούμενη ασφαλή θέση (Bouncing)
+                        this.player.setAttribute('position', this.lastPos);
+                    } else {
+                        // Αποθήκευση της τρέχουσας ασφαλούς θέσης
+                        this.lastPos.copy(pos);
+                    }
+                } else {
+                    this.lastPos.copy(pos);
                 }
             }
         });
     </script>
 </head>
-<body style="margin: 0; overflow: hidden;">
-    
-    <div style="position: absolute; bottom: 8%; left: 0; width: 100%; text-align: center; z-index: 100; pointer-events: none;">
-        <div id="html-info" style="color: #00ff00; font-family: 'Courier New', Courier, monospace; font-size: 1.2rem; text-shadow: 2px 2px 0px #000; background: rgba(0, 20, 0, 0.7); display: inline-block; padding: 15px; border-radius: 8px; border: 1px solid #00ff00; white-space: pre-line;">
-            Φόρτωση...
+<body style="margin: 0; overflow: hidden; background-color: #000;">
+
+    <div style="position: absolute; top: 10%; left: 0; width: 100%; text-align: center; z-index: 100; pointer-events: none;">
+        <div id="hud-message" style="color: #ff0055; font-family: 'Courier New', Courier, monospace; font-size: 1.5rem; text-shadow: 2px 2px 0px #000; background: rgba(0, 0, 0, 0.8); display: inline-block; padding: 15px 30px; border-radius: 8px; border: 2px solid #ff0055; white-space: pre-line; text-transform: uppercase;">
+            ΒΡΕΣ ΤΗΝ ΕΞΟΔΟ
         </div>
     </div>
 
-    <a-scene cursor="rayOrigin: mouse" raycaster="objects: .interactive" game-logic>
+    <a-scene neon-maze background="color: #050505">
+        <a-light type="ambient" intensity="0.3" color="#444466"></a-light>
         
-        <a-sky color="#050505"></a-sky>
-        <a-sphere radius="30" wireframe="true" color="#113322" animation="property: rotation; to: 0 360 0; loop: true; dur: 100000"></a-sphere>
+        <a-plane position="20 0 20" rotation="-90 0 0" width="100" height="100" color="#111122" wireframe="true"></a-plane>
 
-        <a-camera wasd-controls="enabled:false">
-            <a-plane color="#000" height="0.6" width="1.6" opacity="0" position="0 -0.6 -1">
-                <a-cone id="east" color="#00ffff" scale="0.05 0.05 0.05" position="0.6 0 0" rotation="0 -30 -88"></a-cone>
-                <a-cone id="west" color="#00ffff" scale="0.05 0.05 0.05" position="-0.6 0 0" rotation="0 30 88"></a-cone>
-                <a-cone id="north" color="#00ffff" scale="0.05 0.05 0.05" position="0 0.35 0" rotation="-20 0 0"></a-cone>
-                <a-cone id="south" color="#00ffff" scale="0.05 0.05 0.05" position="0 -0.35 0" rotation="-40 0 180"></a-cone>
-            </a-plane>
-            <a-cursor fuse="true" animation__fusing="property: scale; from: 1 1 1; to: 0.1 0.1 0.1; dur: 1500; startEvents: fusing" color="#ff00ff"></a-cursor>
-        </a-camera>
-
-        <a-entity id="scene1" class="scene" visible="true">
-            <a-box position="0 1 -4" rotation="0 45 0" wireframe="true" color="#00ff00" scale="1 1 1" animation="property: rotation; to: 0 405 0; loop: true; dur: 4000"></a-box>
-        </a-entity>
-
-        <a-entity id="scene2" class="scene" visible="false">
-            <a-cylinder class="object" position="-3 1 -4" scale="0.5 2 0.5" color="#ff0055" wireframe="true" 
-                drop="Κλειδί_Συστήματος.exe" 
-                pick="Κρυπτογραφημένο_Hash" 
-                goal='Επιτυχής Ταυτοποίηση.\nΤο Hash δημιουργήθηκε.'
-                fail='Πρόσβαση Απορρίφθηκε.\nΧρειάζεσαι το Κλειδί Συστήματος.'>
-            </a-cylinder>
-        </a-entity>
-
-        <a-entity id="scene3" class="scene" visible="false">
-            <a-dodecahedron class="object" position="-1.25 0.75 -4" scale="1 1 1" color="#ffff00" wireframe="true"
-                drop="Δικαιώματα_Admin" 
-                goal='Firewall παρακάμφθηκε...\nΕίσαι μέσα.'
-                fail='Προειδοποίηση!\nΜη εγγεγραμμένη οντότητα.'>
-            </a-dodecahedron>
-        </a-entity>
-
-        <a-entity id="scene4" class="scene" visible="false">
-            <a-torus-knot class="object" position="4 2 1" scale="0.3 0.3 0.3" color="#00ffff" wireframe="true"
-                drop="Κρυπτογραφημένο_Hash" 
-                goal="Μεταφόρτωση ολοκληρώθηκε.\nΕίσαι ελεύθερος στο δίκτυο!"
-                fail='Σφάλμα:\nΑδυναμία σύνδεσης (Λείπει το Hash).'>
-            </a-torus-knot>
-        </a-entity>
-
-        <a-entity id="scene5" class="scene" visible="false">
-            <a-octahedron class="object" position="-4 -1.5 2.5" color="#ffffff" wireframe="true"
-                drop="Κρυπτογραφημένο_Hash" 
-                goal='Δεδομένα ανακτήθηκαν!\nΕυχαριστώ χρήστη.' 
-                fail='Κατεστραμμένοι τομείς.\nΑδυναμία ανάγνωσης.'>
-            </a-octahedron>
-        </a-entity>
-
-        <a-entity id="scene6" class="scene" visible="false">
-            <a-entity class="object" position="0 2 -8" pick="Δικαιώματα_Admin">
-                <a-cylinder radius="2" height="4" color="#ff00ff" wireframe="true" animation="property: rotation; to: 360 0 0; loop: true; dur: 8000"></a-cylinder>
-                <a-sphere radius="1" color="#00ffff" wireframe="true"></a-sphere>
-            </a-entity>
-        </a-entity>
-
+        <a-entity id="camera" camera look-controls wasd-controls="acceleration: 20"></a-entity>
     </a-scene>
+
 </body>
 </html>

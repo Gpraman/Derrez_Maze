@@ -1,260 +1,225 @@
 <!DOCTYPE html>
-<html lang="el">
+<html>
 <head>
     <meta charset="utf-8">
-    <title>VR II: Memory Fragments</title>
+    <title>VR II: Σφάλμα Μνήμης</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
-        const CELL_SIZE = 4;
+        const MAP = [
+            [0, 5, 6],
+            [2, 1, 0],
+            [0, 3, 4]
+        ];
 
-        AFRAME.registerComponent('procedural-maze', {
+        const TEXT = [
+            'Εκκίνηση... Τομέας 0:\nΕντοπίστηκαν σφάλματα.',
+            'Κατεστραμμένη Πύλη:\nΑπαιτείται "Κλειδί_Συστήματος.exe"',
+            'Υπερχείλιση Μνήμης.\nΤο Firewall παρακολουθεί...',
+            'Θύρα 8080:\nΗ έξοδος στο Δίκτυο. Είσαι έτοιμος;',
+            'Διαγραμμένος Κώδικας:\n"Βοήθησέ με να επαναφερθώ..."',
+            'Ο Πυρήνας.\nΑναμονή για Δικαιώματα Διαχειριστή...'
+        ];
+
+        AFRAME.registerComponent('game-logic', {
             init: function () {
-                this.player = document.querySelector('#camera');
-                this.mazeContainer = document.querySelector('#maze-container');
-                this.messageUI = document.querySelector('#hud-message');
-                this.invUI = document.querySelector('#hud-inv');
-                this.levelUI = document.querySelector('#hud-level');
-                this.floor = document.querySelector('#floor-grid');
+                this.currentScene = 1;
+                this.inventory = ['Κλειδί_Συστήματος.exe'];
                 
-                this.currentLevel = 1;
-                this.maxLevels = 10;
-                this.lastPos = new THREE.Vector3();
-                this.wonGame = false;
-                
-                this.loadLevel(this.currentLevel);
+                // ΔΙΟΡΘΩΣΗ: Περιμένουμε να φορτώσει η σκηνή για να μην κρασάρει
+                let sceneEl = document.querySelector('a-scene');
+                if (sceneEl.hasLoaded) {
+                    this.setupGame();
+                } else {
+                    sceneEl.addEventListener('loaded', () => this.setupGame());
+                }
             },
 
-            // ΑΛΓΟΡΙΘΜΟΣ ΠΑΡΑΓΩΓΗΣ ΛΑΒΥΡΙΝΘΟΥ
-            generateMap: function(size) {
-                let map = Array(size).fill().map(() => Array(size).fill(1));
-                
-                function carve(x, y) {
-                    map[y][x] = 0;
-                    let dirs = [[0,-1],[0,1],[-1,0],[1,0]].sort(() => Math.random() - 0.5);
-                    for (let d of dirs) {
-                        let nx = x + d[0]*2, ny = y + d[1]*2;
-                        if (nx > 0 && nx < size-1 && ny > 0 && ny < size-1 && map[ny][nx] === 1) {
-                            map[y+d[1]][x+d[0]] = 0;
-                            carve(nx, ny);
-                        }
-                    }
-                }
-                carve(1, 1);
-                return map;
+            setupGame: function() {
+                const directions = ['north', 'south', 'east', 'west'];
+                directions.forEach(dir => {
+                    const cone = document.querySelector('#' + dir);
+                    if (cone) cone.addEventListener('click', () => this.move(dir));
+                });
+
+                document.querySelectorAll('.object').forEach(el => {
+                    el.addEventListener('click', (e) => this.interact(e.target));
+                });
+
+                this.updateScene();
             },
 
-            loadLevel: function(level) {
-                // Εκκαθάριση προηγούμενου λαβύρινθου
-                this.mazeContainer.innerHTML = '';
-                this.shards = [];
-                this.walls = [];
-                this.exitEl = null;
-                this.shardsCollected = 0;
-                this.levelWon = false;
-
-                // Υπολογισμός δυσκολίας
-                let mapSize = 7 + (level * 2); // Αυξάνεται το μέγεθος
-                this.totalShards = 2 + Math.floor(level / 2); // Περισσότερα shards στα μεγάλα level
-                this.currentMap = this.generateMap(mapSize);
-
-                // Εύρεση κενών θέσεων για να κρύψουμε τα shards
-                let emptySpots = [];
-                for (let z = 1; z < mapSize - 1; z++) {
-                    for (let x = 1; x < mapSize - 1; x++) {
-                        // Δεν βάζουμε shard στο σημείο εκκίνησης (1,1)
-                        if (this.currentMap[z][x] === 0 && (x !== 1 || z !== 1)) {
-                            emptySpots.push({x, z});
-                        }
+            getCoords: function(sceneId) {
+                for (let y = 0; y < 3; y++) {
+                    for (let x = 0; x < 3; x++) {
+                        if (MAP[y][x] === sceneId) return { x, y };
                     }
                 }
-                emptySpots = emptySpots.sort(() => Math.random() - 0.5); // Ανακάτεμα
+                return null;
+            },
 
-                // Χτίσιμο 3D Κόσμου
-                for (let z = 0; z < mapSize; z++) {
-                    for (let x = 0; x < mapSize; x++) {
-                        let px = x * CELL_SIZE;
-                        let pz = z * CELL_SIZE;
+            move: function(dir) {
+                let coords = this.getCoords(this.currentScene);
+                if (!coords) return;
 
-                        if (this.currentMap[z][x] === 1) {
-                            let wall = document.createElement('a-box');
-                            wall.setAttribute('position', `${px} 2 ${pz}`);
-                            wall.setAttribute('width', CELL_SIZE);
-                            wall.setAttribute('height', 4);
-                            wall.setAttribute('depth', CELL_SIZE);
-                            wall.setAttribute('color', '#ff0055');
-                            wall.setAttribute('wireframe', 'true');
-                            this.mazeContainer.appendChild(wall);
-                            this.walls.push(wall);
+                let nx = coords.x;
+                let ny = coords.y;
+
+                if (dir === 'north') ny--;
+                if (dir === 'south') ny++;
+                if (dir === 'east') nx++;
+                if (dir === 'west') nx--;
+
+                if (ny >= 0 && ny < 3 && nx >= 0 && nx < 3 && MAP[ny][nx] !== 0) {
+                    this.currentScene = MAP[ny][nx];
+                    this.updateScene();
+                }
+            },
+
+            interact: function(el) {
+                let pick = el.getAttribute('pick');
+                let drop = el.getAttribute('drop');
+                let goal = el.getAttribute('goal');
+                let fail = el.getAttribute('fail');
+
+                if (drop) {
+                    if (this.inventory.includes(drop)) {
+                        this.displayText(goal || "Δεδομένα έγιναν αποδεκτά.");
+                        if (pick && !this.inventory.includes(pick)) {
+                            this.inventory.push(pick);
+                            el.setAttribute('visible', 'false');
+                            el.classList.remove('interactive', 'object');
                         }
+                    } else {
+                        this.displayText(fail || "Σφάλμα: Λείπουν δεδομένα.");
+                    }
+                } else if (pick) {
+                    if (!this.inventory.includes(pick)) {
+                        this.inventory.push(pick);
+                        this.displayText("ΑΠΟΚΤΗΘΗΚΕ:\n" + pick);
+                        el.setAttribute('visible', 'false');
+                        el.classList.remove('interactive', 'object');
                     }
                 }
+                setTimeout(() => this.updateScene(), 2500);
+            },
 
-                // Τοποθέτηση Shards (Κρυμμένες Αναμνήσεις)
-                for (let i = 0; i < this.totalShards; i++) {
-                    let spot = emptySpots.pop();
-                    this.currentMap[spot.z][spot.x] = 3; // 3 = Κρύσταλλος
+            updateScene: function() {
+                document.querySelectorAll('.scene').forEach(scene => {
+                    scene.setAttribute('visible', 'false');
+                    scene.querySelectorAll('.object').forEach(obj => obj.classList.remove('interactive'));
+                });
+
+                let activeScene = document.querySelector('#scene' + this.currentScene);
+                if (activeScene) {
+                    activeScene.setAttribute('visible', 'true');
+                    activeScene.querySelectorAll('.object').forEach(obj => {
+                        if (obj.getAttribute('visible') !== 'false') {
+                            obj.classList.add('interactive');
+                        }
+                    });
+                }
+
+                let coords = this.getCoords(this.currentScene);
+                const dirs = { 'north': {x:0, y:-1}, 'south': {x:0, y:1}, 'east': {x:1, y:0}, 'west': {x:-1, y:0} };
+
+                Object.keys(dirs).forEach(dir => {
+                    let arrow = document.querySelector('#' + dir);
+                    let nx = coords.x + dirs[dir].x;
+                    let ny = coords.y + dirs[dir].y;
                     
-                    let shard = document.createElement('a-octahedron');
-                    shard.setAttribute('position', `${spot.x * CELL_SIZE} 1.6 ${spot.z * CELL_SIZE}`);
-                    shard.setAttribute('color', '#00ffff');
-                    shard.setAttribute('radius', 0.8);
-                    shard.setAttribute('wireframe', 'true');
-                    shard.setAttribute('visible', 'false'); // ΑΟΡΑΤΑ ΣΤΗΝ ΑΡΧΗ
-                    shard.setAttribute('animation', 'property: rotation; to: 360 360 0; loop: true; dur: 3000');
-                    
-                    shard.gridPos = {x: spot.x, z: spot.z};
-                    this.mazeContainer.appendChild(shard);
-                    this.shards.push(shard);
-                }
-
-                // Τοποθέτηση Έξοδου στο πιο μακρινό σημείο
-                let exitSpot = emptySpots.pop();
-                this.currentMap[exitSpot.z][exitSpot.x] = 2; // 2 = Έξοδος
-                this.exitEl = document.createElement('a-cylinder');
-                this.exitEl.setAttribute('position', `${exitSpot.x * CELL_SIZE} 0 ${exitSpot.z * CELL_SIZE}`);
-                this.exitEl.setAttribute('radius', 1.5);
-                this.exitEl.setAttribute('height', 10);
-                this.exitEl.setAttribute('color', '#00ff00');
-                this.exitEl.setAttribute('wireframe', 'true');
-                this.exitEl.setAttribute('visible', 'false'); // Αόρατη μέχρι να μαζέψεις τα shards
-                this.exitEl.setAttribute('animation', 'property: rotation; to: 0 360 0; loop: true; dur: 2000');
-                this.mazeContainer.appendChild(this.exitEl);
-
-                // Επαναφορά Παίκτη στην Αφετηρία
-                this.player.setAttribute('position', `${1 * CELL_SIZE} 1.6 ${1 * CELL_SIZE}`);
-                this.lastPos.copy(this.player.getAttribute('position'));
-                
-                // Ενημέρωση UI
-                this.floor.setAttribute('color', '#ff0055');
-                this.levelUI.innerText = `ΕΠΙΠΕΔΟ: ${this.currentLevel} / ${this.maxLevels}`;
-                this.messageUI.innerText = "ΒΡΕΣ ΤΙΣ ΚΡΥΜΜΕΝΕΣ ΑΝΑΜΝΗΣΕΙΣ";
-                this.messageUI.style.color = "#ffffff";
-                this.updateUI();
-            },
-
-            tick: function () {
-                if (this.wonGame || this.levelWon) return;
-
-                let pos = this.player.getAttribute('position');
-                let gridX = Math.round(pos.x / CELL_SIZE);
-                let gridZ = Math.round(pos.z / CELL_SIZE);
-
-                // Έλεγχος Εμφάνισης Αόρατων Shards (Απόσταση < 12 units)
-                this.shards.forEach(shard => {
-                    if (shard.parentNode) {
-                        let dist = pos.distanceTo(shard.object3D.position);
-                        if (dist < 12) {
-                            shard.setAttribute('visible', 'true');
-                        } else {
-                            shard.setAttribute('visible', 'false');
-                        }
+                    if (ny >= 0 && ny < 3 && nx >= 0 && nx < 3 && MAP[ny][nx] !== 0) {
+                        arrow.setAttribute('visible', 'true');
+                        arrow.classList.add('interactive');
+                    } else {
+                        arrow.setAttribute('visible', 'false');
+                        arrow.classList.remove('interactive');
                     }
                 });
 
-                if (gridZ >= 0 && gridZ < this.currentMap.length && gridX >= 0 && gridX < this.currentMap[0].length) {
-                    let tileType = this.currentMap[gridZ][gridX];
-
-                    // Συλλογή Shard
-                    if (tileType === 3) {
-                        this.collectShard(gridX, gridZ);
-                        return;
-                    }
-
-                    // Εύρεση Εξόδου
-                    if (tileType === 2 && this.shardsCollected === this.totalShards) {
-                        this.nextLevel();
-                        return;
-                    }
-
-                    // Collision (Πρόσκρουση σε τοίχο)
-                    if (tileType === 1) {
-                        this.player.setAttribute('position', this.lastPos);
-                    } else {
-                        this.lastPos.copy(pos);
-                    }
-                } else {
-                    this.lastPos.copy(pos);
-                }
+                let sceneText = TEXT[this.currentScene - 1];
+                let invText = "\n\n[ ΑΠΟΘΗΚΗ ΔΕΔΟΜΕΝΩΝ: " + (this.inventory.length > 0 ? this.inventory.join(", ") : "Άδεια") + " ]";
+                this.displayText(sceneText + invText);
             },
 
-            collectShard: function(x, z) {
-                this.currentMap[z][x] = 0; 
-                this.shardsCollected++;
-                
-                // Βρίσκουμε και αφαιρούμε το συγκεκριμένο shard από το 3D
-                let shardToRemove = this.shards.find(s => s.gridPos.x === x && s.gridPos.z === z);
-                if (shardToRemove && shardToRemove.parentNode) {
-                    shardToRemove.parentNode.removeChild(shardToRemove);
-                }
-
-                // Αλλαγή Χρώματος (Οπτικό Feedback)
-                this.walls.forEach(wall => wall.setAttribute('color', '#00ffff'));
-                this.floor.setAttribute('color', '#00ffff');
-                setTimeout(() => {
-                    this.walls.forEach(wall => wall.setAttribute('color', '#ff0055'));
-                    this.floor.setAttribute('color', '#ff0055');
-                }, 1000);
-
-                this.updateUI();
-
-                if (this.shardsCollected === this.totalShards) {
-                    this.messageUI.innerText = "Η ΕΞΟΔΟΣ ΕΜΦΑΝΙΣΤΗΚΕ!";
-                    this.messageUI.style.color = "#00ff00";
-                    this.exitEl.setAttribute('visible', 'true');
-                    this.walls.forEach(wall => wall.setAttribute('color', '#ffff00'));
-                    this.floor.setAttribute('color', '#ffff00');
-                } else {
-                    this.messageUI.innerText = "ΑΝΑΜΝΗΣΗ ΒΡΕΘΗΚΕ!";
-                    setTimeout(() => { if(!this.levelWon) this.messageUI.innerText = "ΨΑΞΕ ΣΤΟ ΣΚΟΤΑΔΙ..."; }, 1500);
-                }
-            },
-
-            updateUI: function() {
-                this.invUI.innerText = `ΑΝΑΜΝΗΣΕΙΣ: ${this.shardsCollected} / ${this.totalShards}`;
-            },
-
-            nextLevel: function() {
-                this.levelWon = true;
-                if (this.currentLevel >= this.maxLevels) {
-                    this.wonGame = true;
-                    this.messageUI.innerText = "ΤΕΡΜΑΤΙΣΕΣ ΤΟ ΠΑΙΧΝΙΔΙ!\nΤΟ ΔΙΚΤΥΟ ΘΕΡΑΠΕΥΤΗΚΕ.";
-                    this.messageUI.style.color = "#00ff00";
-                    this.invUI.style.display = 'none';
-                    this.levelUI.style.display = 'none';
-                } else {
-                    this.messageUI.innerText = "ΠΥΛΗ ΑΝΟΙΧΤΗ!\nΦΟΡΤΩΣΗ ΕΠΟΜΕΝΟΥ ΕΠΙΠΕΔΟΥ...";
-                    this.currentLevel++;
-                    setTimeout(() => this.loadLevel(this.currentLevel), 3000);
+            displayText: function(str) {
+                // Ενημέρωση του 2D HTML Text για τα Ελληνικά
+                let htmlEl = document.querySelector('#html-info');
+                if (htmlEl) {
+                    htmlEl.innerText = str;
+                    htmlEl.style.color = '#ffffff';
+                    setTimeout(() => htmlEl.style.color = '#00ff00', 150);
                 }
             }
         });
     </script>
 </head>
-<body style="margin: 0; overflow: hidden; background-color: #000;">
-
-    <div style="position: absolute; top: 5%; left: 0; width: 100%; text-align: center; z-index: 100; pointer-events: none;">
-        <div id="hud-level" style="color: #ffff00; font-family: 'Courier New', Courier, monospace; font-size: 1.5rem; font-weight: bold; background: rgba(0, 0, 0, 0.7); display: inline-block; padding: 5px 15px; border-radius: 5px; margin-bottom: 5px;">
-            ΕΠΙΠΕΔΟ: 1 / 10
-        </div>
-        <br>
-        <div id="hud-message" style="color: #ffffff; font-family: 'Courier New', Courier, monospace; font-size: 1.2rem; text-shadow: 2px 2px 0px #000; background: rgba(0, 0, 0, 0.7); display: inline-block; padding: 10px 20px; border-radius: 5px; border: 1px solid #ffffff; white-space: pre-line; text-transform: uppercase; margin-bottom: 5px;">
-            ΒΡΕΣ ΤΙΣ ΚΡΥΜΜΕΝΕΣ ΑΝΑΜΝΗΣΕΙΣ
-        </div>
-        <br>
-        <div id="hud-inv" style="color: #00ffff; font-family: 'Courier New', Courier, monospace; font-size: 1.2rem; font-weight: bold; background: rgba(0, 0, 0, 0.8); display: inline-block; padding: 8px 15px; border-radius: 5px; border: 1px solid #00ffff;">
-            ΑΝΑΜΝΗΣΕΙΣ: 0 / 2
+<body style="margin: 0; overflow: hidden;">
+    
+    <div style="position: absolute; bottom: 8%; left: 0; width: 100%; text-align: center; z-index: 100; pointer-events: none;">
+        <div id="html-info" style="color: #00ff00; font-family: 'Courier New', Courier, monospace; font-size: 1.2rem; text-shadow: 2px 2px 0px #000; background: rgba(0, 20, 0, 0.7); display: inline-block; padding: 15px; border-radius: 8px; border: 1px solid #00ff00; white-space: pre-line;">
+            Φόρτωση...
         </div>
     </div>
 
-    <a-scene procedural-maze background="color: #050505">
-        <a-light type="ambient" intensity="0.3" color="#444466"></a-light>
+    <a-scene cursor="rayOrigin: mouse" raycaster="objects: .interactive" game-logic>
         
-        <a-plane id="floor-grid" position="50 0 50" rotation="-90 0 0" width="300" height="300" color="#ff0055" wireframe="true"></a-plane>
+        <a-sky color="#050505"></a-sky>
+        <a-sphere radius="30" wireframe="true" color="#113322" animation="property: rotation; to: 0 360 0; loop: true; dur: 100000"></a-sphere>
 
-        <a-entity id="maze-container"></a-entity>
+        <a-camera wasd-controls="enabled:false">
+            <a-plane color="#000" height="0.6" width="1.6" opacity="0" position="0 -0.6 -1">
+                <a-cone id="east" color="#00ffff" scale="0.05 0.05 0.05" position="0.6 0 0" rotation="0 -30 -88"></a-cone>
+                <a-cone id="west" color="#00ffff" scale="0.05 0.05 0.05" position="-0.6 0 0" rotation="0 30 88"></a-cone>
+                <a-cone id="north" color="#00ffff" scale="0.05 0.05 0.05" position="0 0.35 0" rotation="-20 0 0"></a-cone>
+                <a-cone id="south" color="#00ffff" scale="0.05 0.05 0.05" position="0 -0.35 0" rotation="-40 0 180"></a-cone>
+            </a-plane>
+            <a-cursor fuse="true" animation__fusing="property: scale; from: 1 1 1; to: 0.1 0.1 0.1; dur: 1500; startEvents: fusing" color="#ff00ff"></a-cursor>
+        </a-camera>
 
-        <a-entity id="camera" camera look-controls wasd-controls="acceleration: 25"></a-entity>
+        <a-entity id="scene1" class="scene" visible="true">
+            <a-box position="0 1 -4" rotation="0 45 0" wireframe="true" color="#00ff00" scale="1 1 1" animation="property: rotation; to: 0 405 0; loop: true; dur: 4000"></a-box>
+        </a-entity>
+
+        <a-entity id="scene2" class="scene" visible="false">
+            <a-cylinder class="object" position="-3 1 -4" scale="0.5 2 0.5" color="#ff0055" wireframe="true" 
+                drop="Κλειδί_Συστήματος.exe" 
+                pick="Κρυπτογραφημένο_Hash" 
+                goal='Επιτυχής Ταυτοποίηση.\nΤο Hash δημιουργήθηκε.'
+                fail='Πρόσβαση Απορρίφθηκε.\nΧρειάζεσαι το Κλειδί Συστήματος.'>
+            </a-cylinder>
+        </a-entity>
+
+        <a-entity id="scene3" class="scene" visible="false">
+            <a-dodecahedron class="object" position="-1.25 0.75 -4" scale="1 1 1" color="#ffff00" wireframe="true"
+                drop="Δικαιώματα_Admin" 
+                goal='Firewall παρακάμφθηκε...\nΕίσαι μέσα.'
+                fail='Προειδοποίηση!\nΜη εγγεγραμμένη οντότητα.'>
+            </a-dodecahedron>
+        </a-entity>
+
+        <a-entity id="scene4" class="scene" visible="false">
+            <a-torus-knot class="object" position="4 2 1" scale="0.3 0.3 0.3" color="#00ffff" wireframe="true"
+                drop="Κρυπτογραφημένο_Hash" 
+                goal="Μεταφόρτωση ολοκληρώθηκε.\nΕίσαι ελεύθερος στο δίκτυο!"
+                fail='Σφάλμα:\nΑδυναμία σύνδεσης (Λείπει το Hash).'>
+            </a-torus-knot>
+        </a-entity>
+
+        <a-entity id="scene5" class="scene" visible="false">
+            <a-octahedron class="object" position="-4 -1.5 2.5" color="#ffffff" wireframe="true"
+                drop="Κρυπτογραφημένο_Hash" 
+                goal='Δεδομένα ανακτήθηκαν!\nΕυχαριστώ χρήστη.' 
+                fail='Κατεστραμμένοι τομείς.\nΑδυναμία ανάγνωσης.'>
+            </a-octahedron>
+        </a-entity>
+
+        <a-entity id="scene6" class="scene" visible="false">
+            <a-entity class="object" position="0 2 -8" pick="Δικαιώματα_Admin">
+                <a-cylinder radius="2" height="4" color="#ff00ff" wireframe="true" animation="property: rotation; to: 360 0 0; loop: true; dur: 8000"></a-cylinder>
+                <a-sphere radius="1" color="#00ffff" wireframe="true"></a-sphere>
+            </a-entity>
+        </a-entity>
+
     </a-scene>
-
 </body>
 </html>

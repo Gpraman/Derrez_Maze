@@ -16,7 +16,7 @@
             skyBlack: '#000000'
         };
 
-        // ΜΗΧΑΝΗ ΗΧΟΥ (Για τα εφέ του παιχνιδιού)
+        // ΜΗΧΑΝΗ ΗΧΟΥ
         const SoundEngine = {
             ctx: null,
             init: function() {
@@ -64,6 +64,25 @@
                 gain.connect(this.ctx.destination);
                 osc.start();
                 osc.stop(this.ctx.currentTime + 3);
+            },
+            playDerezzed: function() {
+                this.init();
+                // Βαρύς, πτωτικός ήχος "σβησίματος" συστήματος
+                if (!this.ctx) return;
+                let osc = this.ctx.createOscillator();
+                let gain = this.ctx.createGain();
+                osc.type = 'square';
+                
+                osc.frequency.setValueAtTime(200, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(10, this.ctx.currentTime + 1.5); 
+                
+                gain.gain.setValueAtTime(0.6, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 1.5);
+                
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 1.5);
             }
         };
 
@@ -74,6 +93,7 @@
                 this.messageUI = document.querySelector('#hud-message');
                 this.invUI = document.querySelector('#hud-inv');
                 this.levelUI = document.querySelector('#hud-level');
+                this.timerUI = document.querySelector('#hud-timer');
                 this.floor = document.querySelector('#floor-grid');
                 
                 this.currentLevel = 1;
@@ -81,16 +101,19 @@
                 this.lastPos = new THREE.Vector3();
                 this.wonGame = false;
                 
+                // Μεταβλητές Χρονομέτρου
+                this.timeRemaining = 0;
+                this.timerActive = false;
+                
                 this.heroColorObj = new THREE.Color(TRON_COLORS.heroCyan);
                 this.enemyColorObj = new THREE.Color(TRON_COLORS.enemyOrange);
                 this.activeWallColor = this.heroColorObj;
                 
-                // Ενεργοποίηση Ήχων και Μουσικής (music.mp3) με το πρώτο κλικ
                 window.addEventListener('click', () => {
                     SoundEngine.init();
                     let bgm = document.querySelector('#bgm');
                     if(bgm && bgm.paused) {
-                        bgm.volume = 0.5; // Ρύθμιση έντασης μουσικής στο 50%
+                        bgm.volume = 0.5;
                         bgm.play().catch(e => console.log("Audio play failed:", e));
                     }
                 }, {once:true});
@@ -124,9 +147,14 @@
                 this.levelWon = false;
                 this.activeWallColor = this.heroColorObj; 
 
+                // Υπολογισμός μεγέθους και δυσκολίας
                 let mapSize = 7 + (level * 2); 
                 this.totalShards = 2 + Math.floor(level / 2); 
                 this.currentMap = this.generateMap(mapSize);
+                
+                // Υπολογισμός Χρόνου: 45 δευτερόλεπτα + 15 δευτερόλεπτα για κάθε επίπεδο
+                this.timeRemaining = 45 + (level * 15);
+                this.timerActive = true;
 
                 let emptySpots = [];
                 for (let z = 1; z < mapSize - 1; z++) {
@@ -205,10 +233,21 @@
                 this.messageUI.style.color = TRON_COLORS.dataWhite;
                 this.messageUI.style.borderColor = TRON_COLORS.heroCyan;
                 this.updateUI();
+                this.updateTimerUI();
             },
 
-            tick: function () {
+            tick: function (time, timeDelta) {
                 if (this.wonGame || this.levelWon) return;
+
+                // --- ΛΟΓΙΚΗ ΧΡΟΝΟΜΕΤΡΟΥ ---
+                if (this.timerActive) {
+                    this.timeRemaining -= (timeDelta / 1000); // Μετατροπή των milliseconds σε δευτερόλεπτα
+                    if (this.timeRemaining <= 0) {
+                        this.timeRemaining = 0;
+                        this.triggerGameOver();
+                    }
+                    this.updateTimerUI();
+                }
 
                 let pos = this.player.getAttribute('position');
                 let gridX = Math.round(pos.x / CELL_SIZE);
@@ -280,6 +319,7 @@
 
                 if (this.shardsCollected === this.totalShards) {
                     SoundEngine.playPortalOpen();
+                    this.timerActive = false; // Σταματάμε το χρονόμετρο όταν βρει την έξοδο!
 
                     this.messageUI.innerText = "PORTAL ΕΝΕΡΓΟΠΟΙΗΘΗΚΕ!";
                     this.messageUI.style.color = TRON_COLORS.enemyOrange;
@@ -290,7 +330,37 @@
                     this.floor.setAttribute('color', TRON_COLORS.enemyOrange);
                 } else {
                     this.messageUI.innerText = "ΔΕΔΟΜΕΝΑ ΕΝΣΩΜΑΤΩΘΗΚΑΝ";
-                    setTimeout(() => { if(!this.levelWon) this.messageUI.innerText = "ΨΑΞΕ ΣΤΟ 'GRID'..."; }, 1500);
+                    setTimeout(() => { 
+                        if(!this.levelWon && this.timerActive) this.messageUI.innerText = "ΨΑΞΕ ΣΤΟ 'GRID'..."; 
+                    }, 1500);
+                }
+            },
+
+            triggerGameOver: function() {
+                this.timerActive = false;
+                SoundEngine.playDerezzed();
+                
+                this.messageUI.innerText = "DEREZZED...\nΕΠΑΝΑΦΟΡΑ ΣΥΣΤΗΜΑΤΟΣ.";
+                this.messageUI.style.color = TRON_COLORS.enemyOrange;
+                this.messageUI.style.borderColor = TRON_COLORS.enemyOrange;
+                this.activeWallColor = this.enemyColorObj;
+                this.floor.setAttribute('color', TRON_COLORS.enemyOrange);
+                
+                // Επαναφόρτωση της ίδιας πίστας μετά από 3 δευτερόλεπτα
+                setTimeout(() => this.loadLevel(this.currentLevel), 3000);
+            },
+
+            updateTimerUI: function() {
+                let secs = Math.ceil(this.timeRemaining);
+                this.timerUI.innerText = `TIME: ${secs}s`;
+                
+                // Οπτική προειδοποίηση όταν φτάνει στα τελευταία 10 δευτερόλεπτα
+                if (secs <= 10) {
+                    this.timerUI.style.color = TRON_COLORS.enemyOrange;
+                    this.timerUI.style.borderColor = TRON_COLORS.enemyOrange;
+                } else {
+                    this.timerUI.style.color = TRON_COLORS.heroCyan;
+                    this.timerUI.style.borderColor = TRON_COLORS.heroCyan;
                 }
             },
 
@@ -300,6 +370,7 @@
 
             nextLevel: function() {
                 this.levelWon = true;
+                this.timerActive = false;
                 if (this.currentLevel >= this.maxLevels) {
                     this.wonGame = true;
                     this.messageUI.innerText = "ΤΟ 'GRID' ΕΙΝΑΙ ΕΛΕΥΘΕΡΟ!\nSAM FLYNN, ΕΠΕΣΤΡΕΨΕΣ.";
@@ -307,6 +378,7 @@
                     this.messageUI.style.borderColor = TRON_COLORS.heroCyan;
                     this.invUI.style.display = 'none';
                     this.levelUI.style.display = 'none';
+                    this.timerUI.style.display = 'none';
                 } else {
                     this.messageUI.innerText = "ΠΟΡΤΑΛ ΑΝΟΙΧΤΟ!\nΜΕΤΑΦΟΡΑ ΣΕ ΝΕΟ ΤΟΜΕΑ...";
                     this.currentLevel++;
@@ -324,6 +396,11 @@
         <div id="hud-level" style="color: #FFD700; font-family: 'Courier New', Courier, monospace; font-size: 1.5rem; font-weight: bold; background: rgba(0, 0, 0, 0.9); display: inline-block; padding: 5px 15px; border-radius: 2px; margin-bottom: 5px; border: 1px solid #FFD700; text-transform: uppercase;">
             SECTOR: 1 / 10
         </div>
+        
+        <div id="hud-timer" style="color: #00FFFF; font-family: 'Courier New', Courier, monospace; font-size: 1.5rem; font-weight: bold; background: rgba(0, 0, 0, 0.9); display: inline-block; padding: 5px 15px; border-radius: 2px; margin-bottom: 5px; margin-left: 10px; border: 1px solid #00FFFF; text-transform: uppercase;">
+            TIME: 60s
+        </div>
+        
         <br>
         <div id="hud-message" style="color: #ffffff; font-family: 'Courier New', Courier, monospace; font-size: 1.2rem; background: rgba(0, 0, 0, 0.9); display: inline-block; padding: 10px 20px; border-radius: 2px; border: 2px solid #00FFFF; white-space: pre-line; text-transform: uppercase; margin-bottom: 5px; letter-spacing: 2px;">
             ΦΟΡΤΩΣΗ...

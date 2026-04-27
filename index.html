@@ -5,15 +5,12 @@
     <title>VR II: Σφάλμα Μνήμης</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
-        // ΧΑΡΤΗΣ ΠΛΟΗΓΗΣΗΣ (Grid 3x3)
-        // Το 0 σημαίνει "αδιέξοδο"
         const MAP = [
             [0, 5, 6],
             [2, 1, 0],
             [0, 3, 4]
         ];
 
-        // ΕΛΛΗΝΙΚΑ ΚΕΙΜΕΝΑ ΠΕΡΙΒΑΛΛΟΝΤΟΣ
         const TEXT = [
             'Εκκίνηση... Τομέας 0:\nΕντοπίστηκαν σφάλματα.',
             'Κατεστραμμένη Πύλη:\nΑπαιτείται "Κλειδί_Συστήματος.exe"',
@@ -26,17 +23,22 @@
         AFRAME.registerComponent('game-logic', {
             init: function () {
                 this.currentScene = 1;
-                // Αρχίζουμε με το πρώτο αντικείμενο
                 this.inventory = ['Κλειδί_Συστήματος.exe'];
-                this.textEl = document.querySelector('#info');
                 
-                // Προσθέτουμε events στα βελάκια
+                // ΔΙΟΡΘΩΣΗ: Περιμένουμε να φορτώσει η σκηνή για να μην κρασάρει
+                let sceneEl = document.querySelector('a-scene');
+                if (sceneEl.hasLoaded) {
+                    this.setupGame();
+                } else {
+                    sceneEl.addEventListener('loaded', () => this.setupGame());
+                }
+            },
+
+            setupGame: function() {
                 const directions = ['north', 'south', 'east', 'west'];
                 directions.forEach(dir => {
                     const cone = document.querySelector('#' + dir);
-                    if (cone) {
-                        cone.addEventListener('click', () => this.move(dir));
-                    }
+                    if (cone) cone.addEventListener('click', () => this.move(dir));
                 });
 
                 document.querySelectorAll('.object').forEach(el => {
@@ -80,22 +82,17 @@
                 let fail = el.getAttribute('fail');
 
                 if (drop) {
-                    // Αν απαιτεί αντικείμενο που ΕΧΟΥΜΕ
                     if (this.inventory.includes(drop)) {
                         this.displayText(goal || "Δεδομένα έγιναν αποδεκτά.");
-                        // Προαιρετικά: Αν θέλουμε να του αφαιρεί το αντικείμενο, βάζουμε κώδικα εδώ.
-                        // Για να πάρει την ανταμοιβή του (αν υπάρχει):
                         if (pick && !this.inventory.includes(pick)) {
                             this.inventory.push(pick);
                             el.setAttribute('visible', 'false');
                             el.classList.remove('interactive', 'object');
                         }
                     } else {
-                        // Αν δεν έχουμε το σωστό αντικείμενο
                         this.displayText(fail || "Σφάλμα: Λείπουν δεδομένα.");
                     }
                 } else if (pick) {
-                    // Αν είναι απλά αντικείμενο για μάζεμα
                     if (!this.inventory.includes(pick)) {
                         this.inventory.push(pick);
                         this.displayText("ΑΠΟΚΤΗΘΗΚΕ:\n" + pick);
@@ -103,19 +100,15 @@
                         el.classList.remove('interactive', 'object');
                     }
                 }
-                
-                // Ανανεώνουμε το κείμενο μετά από 2 δευτερόλεπτα για να δείξουμε ξανά το inventory
                 setTimeout(() => this.updateScene(), 2500);
             },
 
             updateScene: function() {
-                // Κρύβουμε όλες τις σκηνές
                 document.querySelectorAll('.scene').forEach(scene => {
                     scene.setAttribute('visible', 'false');
                     scene.querySelectorAll('.object').forEach(obj => obj.classList.remove('interactive'));
                 });
 
-                // Εμφανίζουμε τη σωστή σκηνή
                 let activeScene = document.querySelector('#scene' + this.currentScene);
                 if (activeScene) {
                     activeScene.setAttribute('visible', 'true');
@@ -126,57 +119,57 @@
                     });
                 }
 
-                // ΕΞΥΠΝΗ ΕΜΦΑΝΙΣΗ ΒΕΛΩΝ (ΚΩΝΩΝ)
                 let coords = this.getCoords(this.currentScene);
-                const dirs = {
-                    'north': {x: 0, y: -1},
-                    'south': {x: 0, y: 1},
-                    'east': {x: 1, y: 0},
-                    'west': {x: -1, y: 0}
-                };
+                const dirs = { 'north': {x:0, y:-1}, 'south': {x:0, y:1}, 'east': {x:1, y:0}, 'west': {x:-1, y:0} };
 
                 Object.keys(dirs).forEach(dir => {
                     let arrow = document.querySelector('#' + dir);
                     let nx = coords.x + dirs[dir].x;
                     let ny = coords.y + dirs[dir].y;
                     
-                    // Ελέγχουμε αν υπάρχει επόμενη σκηνή προς αυτή την κατεύθυνση
                     if (ny >= 0 && ny < 3 && nx >= 0 && nx < 3 && MAP[ny][nx] !== 0) {
-                        arrow.setAttribute('visible', 'true'); // Εμφάνιση βέλους
-                        arrow.classList.add('interactive');    // Γίνεται κλικ
+                        arrow.setAttribute('visible', 'true');
+                        arrow.classList.add('interactive');
                     } else {
-                        arrow.setAttribute('visible', 'false'); // Απόκρυψη αν είναι αδιέξοδο
+                        arrow.setAttribute('visible', 'false');
                         arrow.classList.remove('interactive');
                     }
                 });
 
-                // Ενημέρωση Κειμένου και Inventory
                 let sceneText = TEXT[this.currentScene - 1];
-                let invText = "\n\nΑΠΟΘΗΚΗ ΔΕΔΟΜΕΝΩΝ: " + (this.inventory.length > 0 ? this.inventory.join(", ") : "Άδεια");
+                let invText = "\n\n[ ΑΠΟΘΗΚΗ ΔΕΔΟΜΕΝΩΝ: " + (this.inventory.length > 0 ? this.inventory.join(", ") : "Άδεια") + " ]";
                 this.displayText(sceneText + invText);
             },
 
             displayText: function(str) {
-                this.textEl.setAttribute('value', str);
-                this.textEl.setAttribute('color', '#ffffff');
-                setTimeout(() => this.textEl.setAttribute('color', '#00ff00'), 150);
+                // Ενημέρωση του 2D HTML Text για τα Ελληνικά
+                let htmlEl = document.querySelector('#html-info');
+                if (htmlEl) {
+                    htmlEl.innerText = str;
+                    htmlEl.style.color = '#ffffff';
+                    setTimeout(() => htmlEl.style.color = '#00ff00', 150);
+                }
             }
         });
     </script>
 </head>
+<body style="margin: 0; overflow: hidden;">
+    
+    <div style="position: absolute; bottom: 8%; left: 0; width: 100%; text-align: center; z-index: 100; pointer-events: none;">
+        <div id="html-info" style="color: #00ff00; font-family: 'Courier New', Courier, monospace; font-size: 1.2rem; text-shadow: 2px 2px 0px #000; background: rgba(0, 20, 0, 0.7); display: inline-block; padding: 15px; border-radius: 8px; border: 1px solid #00ff00; white-space: pre-line;">
+            Φόρτωση...
+        </div>
+    </div>
 
-<body>
     <a-scene cursor="rayOrigin: mouse" raycaster="objects: .interactive" game-logic>
         
         <a-sky color="#050505"></a-sky>
         <a-sphere radius="30" wireframe="true" color="#113322" animation="property: rotation; to: 0 360 0; loop: true; dur: 100000"></a-sphere>
 
         <a-camera wasd-controls="enabled:false">
-            <a-plane color="#000" height="0.6" width="1.6" opacity="0.8" position="0 -0.6 -1">
-                <a-text id="info" wrap-count="45" width="1.4" value="Φόρτωση..." color="#00ff00" font="roboto" align="center" position="0 0 0.01"></a-text>
-                
-                <a-cone id="east" color="#00ffff" scale="0.05 0.05 0.05" position="0.9 0 0" rotation="0 -30 -88"></a-cone>
-                <a-cone id="west" color="#00ffff" scale="0.05 0.05 0.05" position="-0.9 0 0" rotation="0 30 88"></a-cone>
+            <a-plane color="#000" height="0.6" width="1.6" opacity="0" position="0 -0.6 -1">
+                <a-cone id="east" color="#00ffff" scale="0.05 0.05 0.05" position="0.6 0 0" rotation="0 -30 -88"></a-cone>
+                <a-cone id="west" color="#00ffff" scale="0.05 0.05 0.05" position="-0.6 0 0" rotation="0 30 88"></a-cone>
                 <a-cone id="north" color="#00ffff" scale="0.05 0.05 0.05" position="0 0.35 0" rotation="-20 0 0"></a-cone>
                 <a-cone id="south" color="#00ffff" scale="0.05 0.05 0.05" position="0 -0.35 0" rotation="-40 0 180"></a-cone>
             </a-plane>

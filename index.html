@@ -7,7 +7,6 @@
     <script>
         const CELL_SIZE = 4;
         
-        // TRON Χρωματική Παλέτα
         const TRON_COLORS = {
             heroCyan: '#00FFFF',
             enemyOrange: '#FF4500',
@@ -16,7 +15,6 @@
             skyBlack: '#000000'
         };
 
-        // ΜΗΧΑΝΗ ΗΧΟΥ
         const SoundEngine = {
             ctx: null,
             init: function() {
@@ -67,7 +65,6 @@
             },
             playDerezzed: function() {
                 this.init();
-                // Βαρύς, πτωτικός ήχος "σβησίματος" συστήματος
                 if (!this.ctx) return;
                 let osc = this.ctx.createOscillator();
                 let gain = this.ctx.createGain();
@@ -83,6 +80,24 @@
                 gain.connect(this.ctx.destination);
                 osc.start();
                 osc.stop(this.ctx.currentTime + 1.5);
+            },
+            playVictory: function() {
+                this.init();
+                if (!this.ctx) return;
+                // Μια "αιθέρια" συγχορδία για το τέλος
+                [523.25, 659.25, 783.99, 1046.50].forEach(freq => {
+                    let osc = this.ctx.createOscillator();
+                    let gain = this.ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                    gain.gain.setValueAtTime(0, this.ctx.currentTime);
+                    gain.gain.linearRampToValueAtTime(0.2, this.ctx.currentTime + 2);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 8);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + 8);
+                });
             }
         };
 
@@ -101,7 +116,6 @@
                 this.lastPos = new THREE.Vector3();
                 this.wonGame = false;
                 
-                // Μεταβλητές Χρονομέτρου
                 this.timeRemaining = 0;
                 this.timerActive = false;
                 
@@ -147,12 +161,10 @@
                 this.levelWon = false;
                 this.activeWallColor = this.heroColorObj; 
 
-                // Υπολογισμός μεγέθους και δυσκολίας
                 let mapSize = 7 + (level * 2); 
                 this.totalShards = 2 + Math.floor(level / 2); 
                 this.currentMap = this.generateMap(mapSize);
                 
-                // Υπολογισμός Χρόνου: 45 δευτερόλεπτα + 15 δευτερόλεπτα για κάθε επίπεδο
                 this.timeRemaining = 45 + (level * 15);
                 this.timerActive = true;
 
@@ -239,9 +251,8 @@
             tick: function (time, timeDelta) {
                 if (this.wonGame || this.levelWon) return;
 
-                // --- ΛΟΓΙΚΗ ΧΡΟΝΟΜΕΤΡΟΥ ---
                 if (this.timerActive) {
-                    this.timeRemaining -= (timeDelta / 1000); // Μετατροπή των milliseconds σε δευτερόλεπτα
+                    this.timeRemaining -= (timeDelta / 1000); 
                     if (this.timeRemaining <= 0) {
                         this.timeRemaining = 0;
                         this.triggerGameOver();
@@ -253,7 +264,6 @@
                 let gridX = Math.round(pos.x / CELL_SIZE);
                 let gridZ = Math.round(pos.z / CELL_SIZE);
 
-                // --- REZZING SYSTEM ---
                 let rezRadius = 16; 
                 this.walls.forEach(wall => {
                     let mesh = wall.getObject3D('mesh');
@@ -267,7 +277,6 @@
                     }
                 });
 
-                // --- STEALTH DISCS ---
                 let visibilityRadius = 5; 
                 this.shards.forEach(shard => {
                     if (shard.parentNode) {
@@ -280,7 +289,6 @@
                     }
                 });
 
-                // --- MOVEMENT & COLLISION ---
                 if (gridZ >= 0 && gridZ < this.currentMap.length && gridX >= 0 && gridX < this.currentMap[0].length) {
                     let tileType = this.currentMap[gridZ][gridX];
 
@@ -319,7 +327,7 @@
 
                 if (this.shardsCollected === this.totalShards) {
                     SoundEngine.playPortalOpen();
-                    this.timerActive = false; // Σταματάμε το χρονόμετρο όταν βρει την έξοδο!
+                    this.timerActive = false; 
 
                     this.messageUI.innerText = "PORTAL ΕΝΕΡΓΟΠΟΙΗΘΗΚΕ!";
                     this.messageUI.style.color = TRON_COLORS.enemyOrange;
@@ -346,7 +354,6 @@
                 this.activeWallColor = this.enemyColorObj;
                 this.floor.setAttribute('color', TRON_COLORS.enemyOrange);
                 
-                // Επαναφόρτωση της ίδιας πίστας μετά από 3 δευτερόλεπτα
                 setTimeout(() => this.loadLevel(this.currentLevel), 3000);
             },
 
@@ -354,7 +361,6 @@
                 let secs = Math.ceil(this.timeRemaining);
                 this.timerUI.innerText = `TIME: ${secs}s`;
                 
-                // Οπτική προειδοποίηση όταν φτάνει στα τελευταία 10 δευτερόλεπτα
                 if (secs <= 10) {
                     this.timerUI.style.color = TRON_COLORS.enemyOrange;
                     this.timerUI.style.borderColor = TRON_COLORS.enemyOrange;
@@ -371,14 +377,46 @@
             nextLevel: function() {
                 this.levelWon = true;
                 this.timerActive = false;
+                
                 if (this.currentLevel >= this.maxLevels) {
+                    // --- Η ΤΕΛΙΚΗ ΕΚΠΛΗΞΗ (ASCENSION) ---
                     this.wonGame = true;
-                    this.messageUI.innerText = "ΤΟ 'GRID' ΕΙΝΑΙ ΕΛΕΥΘΕΡΟ!\nSAM FLYNN, ΕΠΕΣΤΡΕΨΕΣ.";
-                    this.messageUI.style.color = TRON_COLORS.dataWhite;
-                    this.messageUI.style.borderColor = TRON_COLORS.heroCyan;
+                    
+                    // 1. Κλείσιμο μουσικής, άνοιγμα "θεϊκού" ήχου
+                    let bgm = document.querySelector('#bgm');
+                    if(bgm) bgm.pause();
+                    SoundEngine.playVictory();
+
+                    // 2. Απενεργοποίηση ελέγχου (WASD)
+                    this.player.removeAttribute('wasd-controls');
+
+                    // 3. Εξαφάνιση UI
                     this.invUI.style.display = 'none';
                     this.levelUI.style.display = 'none';
                     this.timerUI.style.display = 'none';
+                    
+                    this.messageUI.innerText = "ΠΡΟΣΒΑΣΗ ΣΤΟΝ ΔΗΜΙΟΥΡΓΟ...";
+                    this.messageUI.style.color = TRON_COLORS.dataWhite;
+                    this.messageUI.style.borderColor = TRON_COLORS.dataWhite;
+
+                    // 4. Η Ανάληψη: Η κάμερα απογειώνεται προς τον ουρανό
+                    let currPos = this.player.getAttribute('position');
+                    this.player.setAttribute('animation__ascend', `property: position; to: ${currPos.x} 100 ${currPos.z}; dur: 8000; easing: easeInOutCubic`);
+                    
+                    // 5. Η Κατάρρευση: Οι τοίχοι του λαβύρινθου πέφτουν στο κενό ένας-ένας
+                    this.walls.forEach((wall) => {
+                        let delay = Math.random() * 3000; // Τυχαία καθυστέρηση για κάθε τοίχο
+                        setTimeout(() => {
+                            let wPos = wall.object3D.position;
+                            wall.setAttribute('animation__fall', `property: position; to: ${wPos.x} -50 ${wPos.z}; dur: 4000; easing: easeInQuad`);
+                        }, delay);
+                    });
+
+                    // 6. Το τελικό μήνυμα
+                    setTimeout(() => {
+                        this.messageUI.innerHTML = "ΕΞΟΔΟΣ ΑΠΟ ΤΟ GRID ΕΠΙΤΥΧΗΣ<br><br>ΕΡΓΑΣΙΑ: ΕΙΚΟΝΙΚΗ ΠΡΑΓΜΑΤΙΚΟΤΗΤΑ II";
+                    }, 6000);
+
                 } else {
                     this.messageUI.innerText = "ΠΟΡΤΑΛ ΑΝΟΙΧΤΟ!\nΜΕΤΑΦΟΡΑ ΣΕ ΝΕΟ ΤΟΜΕΑ...";
                     this.currentLevel++;
@@ -396,11 +434,9 @@
         <div id="hud-level" style="color: #FFD700; font-family: 'Courier New', Courier, monospace; font-size: 1.5rem; font-weight: bold; background: rgba(0, 0, 0, 0.9); display: inline-block; padding: 5px 15px; border-radius: 2px; margin-bottom: 5px; border: 1px solid #FFD700; text-transform: uppercase;">
             SECTOR: 1 / 10
         </div>
-        
         <div id="hud-timer" style="color: #00FFFF; font-family: 'Courier New', Courier, monospace; font-size: 1.5rem; font-weight: bold; background: rgba(0, 0, 0, 0.9); display: inline-block; padding: 5px 15px; border-radius: 2px; margin-bottom: 5px; margin-left: 10px; border: 1px solid #00FFFF; text-transform: uppercase;">
             TIME: 60s
         </div>
-        
         <br>
         <div id="hud-message" style="color: #ffffff; font-family: 'Courier New', Courier, monospace; font-size: 1.2rem; background: rgba(0, 0, 0, 0.9); display: inline-block; padding: 10px 20px; border-radius: 2px; border: 2px solid #00FFFF; white-space: pre-line; text-transform: uppercase; margin-bottom: 5px; letter-spacing: 2px;">
             ΦΟΡΤΩΣΗ...

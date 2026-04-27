@@ -1,112 +1,207 @@
 <!DOCTYPE html>
 <html>
-  <head>
+<head>
     <meta charset="utf-8">
-    <title>Castle Defense VR | Digital Arts Project</title>
-    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-physics-system@v4.2.2/dist/aframe-physics-system.min.js"></script>
-    
+    <title>VR II: The Memory Glitch</title>
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
-      let score = 0;
-      let health = 100;
-      let gameActive = true;
+        // NAVIGATION MAP (Grid 3x3)
+        // 0 σημαίνει "τοίχος" / μη προσβάσιμο
+        const MAP = [
+            [0, 5, 6],
+            [2, 1, 0],
+            [0, 3, 4]
+        ];
 
-      AFRAME.registerComponent('enemy-logic', {
-        init: function () {
-          this.speed = 0.05 + (Math.random() * 0.05);
-        },
-        tick: function () {
-          if (!gameActive) return;
-          // Οι εχθροί κινούνται προς τον παίκτη (0, 0, 0)
-          let pos = this.el.getAttribute('position');
-          pos.z += this.speed;
-          this.el.setAttribute('position', pos);
+        // ΚΕΙΜΕΝΑ (Αντί για ρεαλιστικά, χρησιμοποιούμε Cyberpunk / Glitch ύφος)
+        const TEXT = [
+            'System Boot... Sector 0:\nMissing fragments detected.',
+            'A corrupted logic gate blocks the way:\n"Provide kernel_key or terminate."',
+            'Buffer Overflow area.\nThe Firewall daemon is watching...',
+            'Port 8080:\nGateway to the cloud. Ready for upload?',
+            'A fragment of deleted code whispers:\n"Help me recompile..."',
+            'The Core.\nSystem override is required...'
+        ];
 
-          // Αν ο εχθρός φτάσει πολύ κοντά, χάνεις ζωή
-          if (pos.z > -2) {
-            health -= 10;
-            this.destroyEnemy();
-            document.querySelector('#healthUI').setAttribute('value', `Health: ${health}%`);
-            if (health <= 0) alert("Το κάστρο έπεσε! Game Over.");
-          }
-        },
-        destroyEnemy: function () {
-          if (this.el.parentNode) this.el.parentNode.removeChild(this.el);
-        }
-      });
+        // ΕΔΩ ΕΙΝΑΙ Ο ΝΕΟΣ "game-logic" ΚΩΔΙΚΑΣ ΣΕ A-FRAME COMPONENT
+        AFRAME.registerComponent('game-logic', {
+            init: function () {
+                this.currentScene = 1;
+                this.inventory = ['kernel_key.exe'];
+                this.textEl = document.querySelector('#info');
+                
+                // Αρχικοποίηση πρώτης σκηνής
+                this.updateScene();
 
-      AFRAME.registerComponent('game-manager', {
-        init: function () {
-          this.cameraEl = document.querySelector('[camera]');
-          this.el.sceneEl.addEventListener('click', this.shoot.bind(this));
-          
-          // Δημιουργία εχθρών κάθε 2 δευτερόλεπτα
-          setInterval(() => {
-            if (gameActive) this.spawnEnemy();
-          }, 2000);
-        },
+                // Χειρισμός Κίνησης (Κώνοι)
+                const directions = ['north', 'south', 'east', 'west'];
+                directions.forEach(dir => {
+                    const cone = document.querySelector('#' + dir);
+                    if (cone) {
+                        cone.classList.add('interactive');
+                        cone.addEventListener('click', () => this.move(dir));
+                    }
+                });
 
-        spawnEnemy: function () {
-          const enemy = document.createElement('a-sphere');
-          const xPos = (Math.random() * 20) - 10;
-          enemy.setAttribute('position', `${xPos} 1.5 -30`);
-          enemy.setAttribute('radius', '0.7');
-          enemy.setAttribute('color', 'red');
-          enemy.setAttribute('dynamic-body', 'mass: 1');
-          enemy.setAttribute('enemy-logic', '');
-          enemy.setAttribute('class', 'enemy');
-          this.el.sceneEl.appendChild(enemy);
-        },
+                // Χειρισμός Αλληλεπίδρασης (Αντικείμενα)
+                document.querySelectorAll('.object').forEach(el => {
+                    el.addEventListener('click', (e) => this.interact(e.target));
+                });
+            },
 
-        shoot: function () {
-          const ball = document.createElement('a-sphere');
-          const direction = new THREE.Vector3();
-          this.cameraEl.object3D.getWorldDirection(direction);
-          direction.multiplyScalar(-1);
+            getCoords: function(sceneId) {
+                for (let y = 0; y < 3; y++) {
+                    for (let x = 0; x < 3; x++) {
+                        if (MAP[y][x] === sceneId) return { x, y };
+                    }
+                }
+                return null;
+            },
 
-          const pos = new THREE.Vector3();
-          this.cameraEl.object3D.getWorldPosition(pos);
-          pos.add(direction.clone().multiplyScalar(2));
+            move: function(dir) {
+                let coords = this.getCoords(this.currentScene);
+                if (!coords) return;
 
-          ball.setAttribute('position', pos);
-          ball.setAttribute('radius', '0.4');
-          ball.setAttribute('color', 'black');
-          ball.setAttribute('dynamic-body', 'mass: 10');
-          this.el.sceneEl.appendChild(ball);
+                let nx = coords.x;
+                let ny = coords.y;
 
-          ball.addEventListener('body-loaded', () => {
-            const velocity = direction.multiplyScalar(50);
-            ball.body.velocity.set(velocity.x, velocity.y + 2, velocity.z);
-          });
+                if (dir === 'north') ny--;
+                if (dir === 'south') ny++;
+                if (dir === 'east') nx++;
+                if (dir === 'west') nx--;
 
-          // Ανίχνευση σύγκρουσης με εχθρό
-          ball.addEventListener('collide', (e) => {
-            if (e.detail.body.el.classList.contains('enemy')) {
-              score += 10;
-              document.querySelector('#scoreUI').setAttribute('value', `Score: ${score}`);
-              e.detail.body.el.components['enemy-logic'].destroyEnemy();
+                // Έλεγχος αν βγαίνουμε εκτός ορίων του χάρτη
+                if (ny >= 0 && ny < 3 && nx >= 0 && nx < 3) {
+                    let nextScene = MAP[ny][nx];
+                    if (nextScene !== 0) {
+                        this.currentScene = nextScene;
+                        this.updateScene();
+                    } else {
+                        this.displayText("ACCESS DENIED:\nFirewall blocks this path.");
+                    }
+                } else {
+                    this.displayText("END OF LINE:\nCannot proceed further.");
+                }
+            },
+
+            interact: function(el) {
+                let pick = el.getAttribute('pick');
+                let drop = el.getAttribute('drop');
+                let goal = el.getAttribute('goal');
+                let fail = el.getAttribute('fail');
+
+                if (drop) {
+                    if (this.inventory.includes(drop)) {
+                        this.displayText(goal || "Data accepted.");
+                    } else {
+                        this.displayText(fail || "Error: Required data missing.");
+                    }
+                } else if (pick) {
+                    if (!this.inventory.includes(pick)) {
+                        this.inventory.push(pick);
+                        this.displayText("ACQUIRED:\n" + pick);
+                        el.setAttribute('visible', 'false');
+                        el.classList.remove('interactive', 'object');
+                    }
+                }
+            },
+
+            updateScene: function() {
+                // Απόκρυψη όλων των σκηνών
+                document.querySelectorAll('.scene').forEach(scene => {
+                    scene.setAttribute('visible', 'false');
+                    // Απενεργοποίηση interactions στα αόρατα αντικείμενα
+                    scene.querySelectorAll('.object').forEach(obj => obj.classList.remove('interactive'));
+                });
+
+                // Εμφάνιση της τρέχουσας σκηνής
+                let activeScene = document.querySelector('#scene' + this.currentScene);
+                if (activeScene) {
+                    activeScene.setAttribute('visible', 'true');
+                    activeScene.querySelectorAll('.object').forEach(obj => {
+                        if (obj.getAttribute('visible') !== 'false') {
+                            obj.classList.add('interactive');
+                        }
+                    });
+                }
+
+                // Ενημέρωση του κειμένου HUD
+                this.displayText(TEXT[this.currentScene - 1]);
+            },
+
+            displayText: function(str) {
+                this.textEl.setAttribute('value', str);
+                // "Animation" αλλαγής χρώματος στο κείμενο για εφέ terminal
+                this.textEl.setAttribute('color', '#ffffff');
+                setTimeout(() => this.textEl.setAttribute('color', '#00ff00'), 150);
             }
-          });
-
-          setTimeout(() => { if(ball.parentNode) ball.parentNode.removeChild(ball); }, 3000);
-        }
-      });
+        });
     </script>
-  </head>
-  <body>
-    <a-scene physics="gravity: 0; debug: false" game-manager>
-      <a-sky color="#222"></a-sky>
-      <a-plane static-body rotation="-90 0 0" width="100" height="100" color="#333"></a-plane>
+</head>
 
-      <a-entity camera look-controls position="0 1.6 0">
-        <a-cursor color="cyan"></a-cursor>
-        <a-entity position="0 1 -2">
-          <a-text id="scoreUI" value="Score: 0" align="center" color="white" width="3"></a-text>
-          <a-text id="healthUI" value="Health: 100%" align="center" position="0 -0.2 0" color="red" width="2"></a-text>
+<body>
+    <a-scene cursor="rayOrigin: mouse" raycaster="objects: .interactive" game-logic>
+        
+        <a-sky color="#050505"></a-sky>
+        <a-sphere radius="30" wireframe="true" color="#113322" animation="property: rotation; to: 0 360 0; loop: true; dur: 100000"></a-sphere>
+
+        <a-camera wasd-controls="enabled:false">
+            <a-plane color="#000" height="0.4" width="1.2" opacity="0.8" position="0 -0.6 -1">
+                <a-text id="info" width="1" value="Loading..." color="#00ff00" font="monoid" align="center" position="0 0 0.01"></a-text>
+                
+                <a-cone id="east" color="#00ffff" scale="0.05 0.05 0.05" position="0.7 0 0" rotation="0 -30 -88"></a-cone>
+                <a-cone id="west" color="#00ffff" scale="0.05 0.05 0.05" position="-0.7 0 0" rotation="0 30 88"></a-cone>
+                <a-cone id="north" color="#00ffff" scale="0.05 0.05 0.05" position="0 0.25 0" rotation="-20 0 0"></a-cone>
+                <a-cone id="south" color="#00ffff" scale="0.05 0.05 0.05" position="0 -0.25 0" rotation="-40 0 180"></a-cone>
+            </a-plane>
+            
+            <a-cursor fuse="true" animation__fusing="property: scale; from: 1 1 1; to: 0.1 0.1 0.1; dur: 1500; startEvents: fusing" color="#ff00ff"></a-cursor>
+        </a-camera>
+
+        <a-entity id="scene1" class="scene" visible="true">
+            <a-box position="0 1 -4" rotation="0 45 0" wireframe="true" color="#00ff00" scale="1 1 1" animation="property: rotation; to: 0 405 0; loop: true; dur: 4000"></a-box>
         </a-entity>
-      </a-entity>
-      
-      <a-box position="0 1 -1" width="2" height="3" depth="2" color="#444" static-body></a-box>
+
+        <a-entity id="scene2" class="scene" visible="false">
+            <a-cylinder class="object" position="-3 1 -4" scale="0.5 2 0.5" color="#ff0055" wireframe="true" 
+                drop="kernel_key.exe" 
+                pick="encryption_hash" 
+                goal='Authentication Success.\nHash generated.'
+                fail='Access Denied.\nKernel Key required.'>
+            </a-cylinder>
+        </a-entity>
+
+        <a-entity id="scene3" class="scene" visible="false">
+            <a-dodecahedron class="object" position="-1.25 0.75 -4" scale="1 1 1" color="#ffff00" wireframe="true"
+                drop="admin_rights" 
+                goal='Firewall bypassed...\nYou are in.'
+                fail='Warning!\nUnregistered entity detected.'>
+            </a-dodecahedron>
+        </a-entity>
+
+        <a-entity id="scene4" class="scene" visible="false">
+            <a-torus-knot class="object" position="4 2 1" scale="0.3 0.3 0.3" color="#00ffff" wireframe="true"
+                drop="encryption_hash" 
+                goal="Upload complete.\nYou are free in the web."
+                fail='Error:\nCannot connect to external IP.'>
+            </a-torus-knot>
+        </a-entity>
+
+        <a-entity id="scene5" class="scene" visible="false">
+            <a-octahedron class="object" position="-4 -1.5 2.5" color="#ffffff" wireframe="true"
+                drop="encryption_hash" 
+                goal='Data restored!\nThank you user.' 
+                fail='Sectors corrupted.\nCannot read.'>
+            </a-octahedron>
+        </a-entity>
+
+        <a-entity id="scene6" class="scene" visible="false">
+            <a-entity class="object" position="0 2 -8" pick="admin_rights">
+                <a-cylinder radius="2" height="4" color="#ff00ff" wireframe="true" animation="property: rotation; to: 360 0 0; loop: true; dur: 8000"></a-cylinder>
+                <a-sphere radius="1" color="#00ffff" wireframe="true"></a-sphere>
+            </a-entity>
+        </a-entity>
+
     </a-scene>
-  </body>
+</body>
 </html>

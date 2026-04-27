@@ -2,10 +2,13 @@
 <html lang="el">
 <head>
     <meta charset="utf-8">
-    <title>VR II: Memory Fragments (Bright Edition)</title>
+    <title>VR II: Memory Fragments (Stealth & Color Edition)</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         const CELL_SIZE = 4;
+        
+        // Παλέτα χρωμάτων για την εξέλιξη του λαβύρινθου
+        const MAZE_COLORS = ['#ff0055', '#00ccff', '#aa00ff', '#ff8800', '#00ffaa'];
 
         AFRAME.registerComponent('procedural-maze', {
             init: function () {
@@ -64,6 +67,9 @@
                 }
                 emptySpots = emptySpots.sort(() => Math.random() - 0.5); 
 
+                // Βασικό χρώμα επιπέδου (πάντα το πρώτο της παλέτας)
+                let startColor = MAZE_COLORS[0];
+
                 for (let z = 0; z < mapSize; z++) {
                     for (let x = 0; x < mapSize; x++) {
                         let px = x * CELL_SIZE;
@@ -75,7 +81,7 @@
                             wall.setAttribute('width', CELL_SIZE);
                             wall.setAttribute('height', 4);
                             wall.setAttribute('depth', CELL_SIZE);
-                            wall.setAttribute('color', '#ff0055');
+                            wall.setAttribute('color', startColor);
                             wall.setAttribute('wireframe', 'true');
                             this.mazeContainer.appendChild(wall);
                             this.walls.push(wall);
@@ -89,10 +95,10 @@
                     
                     let shard = document.createElement('a-octahedron');
                     shard.setAttribute('position', `${spot.x * CELL_SIZE} 1.6 ${spot.z * CELL_SIZE}`);
-                    shard.setAttribute('color', '#00ffff');
+                    shard.setAttribute('color', '#ffffff');
                     shard.setAttribute('radius', 0.8);
                     shard.setAttribute('wireframe', 'true');
-                    shard.setAttribute('visible', 'false'); 
+                    shard.setAttribute('visible', 'false'); // Απολύτως αόρατο αρχικά
                     shard.setAttribute('animation', 'property: rotation; to: 360 360 0; loop: true; dur: 3000');
                     
                     shard.gridPos = {x: spot.x, z: spot.z};
@@ -115,7 +121,7 @@
                 this.player.setAttribute('position', `${1 * CELL_SIZE} 1.6 ${1 * CELL_SIZE}`);
                 this.lastPos.copy(this.player.getAttribute('position'));
                 
-                this.floor.setAttribute('color', '#ff0055');
+                this.floor.setAttribute('color', startColor);
                 this.levelUI.innerText = `ΕΠΙΠΕΔΟ: ${this.currentLevel} / ${this.maxLevels}`;
                 this.messageUI.innerText = "ΒΡΕΣ ΤΙΣ ΚΡΥΜΜΕΝΕΣ ΑΝΑΜΝΗΣΕΙΣ";
                 this.messageUI.style.color = "#ffffff";
@@ -129,10 +135,12 @@
                 let gridX = Math.round(pos.x / CELL_SIZE);
                 let gridZ = Math.round(pos.z / CELL_SIZE);
 
+                // Εμφάνιση Αναμνήσεων ΜΟΝΟ από πολύ κοντά (Απόσταση μικρότερη από 6)
+                let visibilityRadius = 6; 
                 this.shards.forEach(shard => {
                     if (shard.parentNode) {
                         let dist = pos.distanceTo(shard.object3D.position);
-                        if (dist < 12) {
+                        if (dist < visibilityRadius) {
                             shard.setAttribute('visible', 'true');
                         } else {
                             shard.setAttribute('visible', 'false');
@@ -172,22 +180,21 @@
                     shardToRemove.parentNode.removeChild(shardToRemove);
                 }
 
-                this.walls.forEach(wall => wall.setAttribute('color', '#00ffff'));
-                this.floor.setAttribute('color', '#00ffff');
-                setTimeout(() => {
-                    this.walls.forEach(wall => wall.setAttribute('color', '#ff0055'));
-                    this.floor.setAttribute('color', '#ff0055');
-                }, 1000);
-
                 this.updateUI();
 
                 if (this.shardsCollected === this.totalShards) {
+                    // Όταν βρεθούν όλα, το περιβάλλον γίνεται χρυσό και εμφανίζεται η έξοδος
                     this.messageUI.innerText = "Η ΕΞΟΔΟΣ ΕΜΦΑΝΙΣΤΗΚΕ!";
                     this.messageUI.style.color = "#00ff00";
                     this.exitEl.setAttribute('visible', 'true');
                     this.walls.forEach(wall => wall.setAttribute('color', '#ffff00'));
                     this.floor.setAttribute('color', '#ffff00');
                 } else {
+                    // Διαφορετικά, αλλάζει μόνιμα στο επόμενο χρώμα της παλέτας
+                    let newColor = MAZE_COLORS[this.shardsCollected % MAZE_COLORS.length];
+                    this.walls.forEach(wall => wall.setAttribute('color', newColor));
+                    this.floor.setAttribute('color', newColor);
+
                     this.messageUI.innerText = "ΑΝΑΜΝΗΣΗ ΒΡΕΘΗΚΕ!";
                     setTimeout(() => { if(!this.levelWon) this.messageUI.innerText = "ΨΑΞΕ ΣΤΟ ΣΚΟΤΑΔΙ..."; }, 1500);
                 }
@@ -231,7 +238,6 @@
     </div>
 
     <a-scene procedural-maze background="color: #111122">
-        
         <a-light type="ambient" intensity="0.8" color="#ffffff"></a-light>
         
         <a-plane id="floor-grid" position="50 0 50" rotation="-90 0 0" width="300" height="300" color="#ff0055" wireframe="true"></a-plane>

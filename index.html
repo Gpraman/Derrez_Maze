@@ -2,13 +2,22 @@
 <html lang="el">
 <head>
     <meta charset="utf-8">
-    <title>VR II: Memory Fragments (Stealth & Color Edition)</title>
+    <title>VR II: The Grid - TRON Legacy Edition</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script>
         const CELL_SIZE = 4;
         
-        // Παλέτα χρωμάτων για την εξέλιξη του λαβύρινθου
-        const MAZE_COLORS = ['#ff0055', '#00ccff', '#aa00ff', '#ff8800', '#00ffaa'];
+        // TRON Χρωματική Παλέτα
+        const TRON_COLORS = {
+            heroCyan: '#00FFFF',    // Sam Flynn Cyan
+            enemyOrange: '#FF4500', // Clu/Rinzler Orange-Red
+            dataWhite: '#FFFFFF',   // Data Pulse
+            gridBlue: '#0000FF',    // Floor Grid Blue
+            skyBlack: '#000000'     // Abyss Black
+        };
+
+        // Παλέτα εξέλιξης λαβύρινθου (Cyan -> Orange)
+        const MAZE_PROGRESSION_COLORS = [TRON_COLORS.heroCyan, TRON_COLORS.enemyOrange];
 
         AFRAME.registerComponent('procedural-maze', {
             init: function () {
@@ -29,7 +38,6 @@
 
             generateMap: function(size) {
                 let map = Array(size).fill().map(() => Array(size).fill(1));
-                
                 function carve(x, y) {
                     map[y][x] = 0;
                     let dirs = [[0,-1],[0,1],[-1,0],[1,0]].sort(() => Math.random() - 0.5);
@@ -67,8 +75,8 @@
                 }
                 emptySpots = emptySpots.sort(() => Math.random() - 0.5); 
 
-                // Βασικό χρώμα επιπέδου (πάντα το πρώτο της παλέτας)
-                let startColor = MAZE_COLORS[0];
+                // Αρχικό TRON Cyan χρώμα για τους τοίχους
+                let startWallColor = TRON_COLORS.heroCyan;
 
                 for (let z = 0; z < mapSize; z++) {
                     for (let x = 0; x < mapSize; x++) {
@@ -76,55 +84,75 @@
                         let pz = z * CELL_SIZE;
 
                         if (this.currentMap[z][x] === 1) {
+                            // Τοίχοι: TRON 'Solid Light' look
                             let wall = document.createElement('a-box');
                             wall.setAttribute('position', `${px} 2 ${pz}`);
                             wall.setAttribute('width', CELL_SIZE);
                             wall.setAttribute('height', 4);
                             wall.setAttribute('depth', CELL_SIZE);
-                            wall.setAttribute('color', startColor);
-                            wall.setAttribute('wireframe', 'true');
+                            // TRON Αισθητική: Μαύρος τοίχος με Cyan wireframe
+                            wall.setAttribute('material', `color: ${TRON_COLORS.skyBlack}; emissive: ${startWallColor}; emissiveIntensity: 0.5; wireframe: true; wireframeLinewidth: 2`);
                             this.mazeContainer.appendChild(wall);
                             this.walls.push(wall);
                         }
                     }
                 }
 
+                // Τοποθέτηση Shards ως Identity Discs
                 for (let i = 0; i < this.totalShards; i++) {
                     let spot = emptySpots.pop();
                     this.currentMap[spot.z][spot.x] = 3; 
                     
-                    let shard = document.createElement('a-octahedron');
-                    shard.setAttribute('position', `${spot.x * CELL_SIZE} 1.6 ${spot.z * CELL_SIZE}`);
-                    shard.setAttribute('color', '#ffffff');
-                    shard.setAttribute('radius', 0.8);
-                    shard.setAttribute('wireframe', 'true');
-                    shard.setAttribute('visible', 'false'); // Απολύτως αόρατο αρχικά
-                    shard.setAttribute('animation', 'property: rotation; to: 360 360 0; loop: true; dur: 3000');
+                    let discEntity = document.createElement('a-entity');
+                    discEntity.setAttribute('position', `${spot.x * CELL_SIZE} 1.6 ${spot.z * CELL_SIZE}`);
+                    discEntity.setAttribute('animation', 'property: rotation; to: 0 360 0; loop: true; dur: 1000; easing: linear');
+                    discEntity.setAttribute('visible', 'false'); // Stealth Proximity
+
+                    // Identity Disc geometry (Torus)
+                    let disc = document.createElement('a-torus');
+                    disc.setAttribute('radius', 0.5);
+                    disc.setAttribute('radius-tubular', 0.05);
+                    disc.setAttribute('color', TRON_COLORS.dataWhite);
+                    disc.setAttribute('material', `emissive: ${TRON_COLORS.heroCyan}; emissiveIntensity: 2; shader: flat`);
+                    disc.setAttribute('rotation', '90 0 0'); // Horizontal orientation
                     
-                    shard.gridPos = {x: spot.x, z: spot.z};
-                    this.mazeContainer.appendChild(shard);
-                    this.shards.push(shard);
+                    // Add a pulse animation
+                    disc.setAttribute('animation__pulse', 'property: scale; from: 1 1 1; to: 1.1 1.1 1.1; dur: 500; dir: alternate; loop: true');
+
+                    discEntity.appendChild(disc);
+                    discEntity.gridPos = {x: spot.x, z: spot.z};
+                    this.mazeContainer.appendChild(discEntity);
+                    this.shards.push(discEntity);
                 }
 
+                // TRON Portal Exit (Κάθετη δέσμη λευκού φωτός)
                 let exitSpot = emptySpots.pop();
                 this.currentMap[exitSpot.z][exitSpot.x] = 2; 
                 this.exitEl = document.createElement('a-cylinder');
-                this.exitEl.setAttribute('position', `${exitSpot.x * CELL_SIZE} 0 ${exitSpot.z * CELL_SIZE}`);
-                this.exitEl.setAttribute('radius', 1.5);
-                this.exitEl.setAttribute('height', 10);
-                this.exitEl.setAttribute('color', '#00ff00');
-                this.exitEl.setAttribute('wireframe', 'true');
+                this.exitEl.setAttribute('position', `${exitSpot.x * CELL_SIZE} 10 ${exitSpot.z * CELL_SIZE}`); // High pillar
+                this.exitEl.setAttribute('radius', 1);
+                this.exitEl.setAttribute('height', 20);
+                this.exitEl.setAttribute('material', `color: ${TRON_COLORS.dataWhite}; emissive: ${TRON_COLORS.heroCyan}; emissiveIntensity: 5; shader: flat; opacity: 0.7; transparent: true`);
                 this.exitEl.setAttribute('visible', 'false'); 
-                this.exitEl.setAttribute('animation', 'property: rotation; to: 0 360 0; loop: true; dur: 2000');
                 this.mazeContainer.appendChild(this.exitEl);
+
+                // Add a light to the exit
+                let exitLight = document.createElement('a-light');
+                exitLight.setAttribute('type', 'point');
+                exitLight.setAttribute('color', TRON_COLORS.dataWhite);
+                exitLight.setAttribute('intensity', 3);
+                exitLight.setAttribute('distance', 15);
+                this.exitEl.appendChild(exitLight);
 
                 this.player.setAttribute('position', `${1 * CELL_SIZE} 1.6 ${1 * CELL_SIZE}`);
                 this.lastPos.copy(this.player.getAttribute('position'));
                 
-                this.floor.setAttribute('color', startColor);
+                // Floor: TRON Blue Grid
+                this.floor.setAttribute('color', TRON_COLORS.gridBlue);
                 this.levelUI.innerText = `ΕΠΙΠΕΔΟ: ${this.currentLevel} / ${this.maxLevels}`;
-                this.messageUI.innerText = "ΒΡΕΣ ΤΙΣ ΚΡΥΜΜΕΝΕΣ ΑΝΑΜΝΗΣΕΙΣ";
-                this.messageUI.style.color = "#ffffff";
+                this.messageUI.innerText = "ΑΝΑΚΤΗΣΕ ΤΑ ΔΕΔΟΜΕΝΑ";
+                this.messageUI.style.color = TRON_COLORS.dataWhite;
+                this.messageUI.style.borderColor = TRON_COLORS.heroCyan;
                 this.updateUI();
             },
 
@@ -135,8 +163,8 @@
                 let gridX = Math.round(pos.x / CELL_SIZE);
                 let gridZ = Math.round(pos.z / CELL_SIZE);
 
-                // Εμφάνιση Αναμνήσεων ΜΟΝΟ από πολύ κοντά (Απόσταση μικρότερη από 6)
-                let visibilityRadius = 6; 
+                // TRON Stealth: Τα discs εμφανίζονται μόνο από ΠΟΛΥ κοντά (Απόσταση 5)
+                let visibilityRadius = 5; 
                 this.shards.forEach(shard => {
                     if (shard.parentNode) {
                         let dist = pos.distanceTo(shard.object3D.position);
@@ -183,37 +211,39 @@
                 this.updateUI();
 
                 if (this.shardsCollected === this.totalShards) {
-                    // Όταν βρεθούν όλα, το περιβάλλον γίνεται χρυσό και εμφανίζεται η έξοδος
-                    this.messageUI.innerText = "Η ΕΞΟΔΟΣ ΕΜΦΑΝΙΣΤΗΚΕ!";
-                    this.messageUI.style.color = "#00ff00";
+                    // Όταν βρεθούν όλα, το περιβάλλον γίνεται Orange (Clu look) και εμφανίζεται το Portal
+                    this.messageUI.innerText = "PORTAL ΕΝΕΡΓΟΠΟΙΗΘΗΚΕ!";
+                    this.messageUI.style.color = TRON_COLORS.enemyOrange;
+                    this.messageUI.style.borderColor = TRON_COLORS.enemyOrange;
                     this.exitEl.setAttribute('visible', 'true');
-                    this.walls.forEach(wall => wall.setAttribute('color', '#ffff00'));
-                    this.floor.setAttribute('color', '#ffff00');
+                    this.walls.forEach(wall => wall.setAttribute('material', `color: ${TRON_COLORS.skyBlack}; emissive: ${TRON_COLORS.enemyOrange}; emissiveIntensity: 1; wireframe: true`));
+                    this.floor.setAttribute('color', TRON_COLORS.enemyOrange);
                 } else {
-                    // Διαφορετικά, αλλάζει μόνιμα στο επόμενο χρώμα της παλέτας
-                    let newColor = MAZE_COLORS[this.shardsCollected % MAZE_COLORS.length];
-                    this.walls.forEach(wall => wall.setAttribute('color', newColor));
-                    this.floor.setAttribute('color', newColor);
-
-                    this.messageUI.innerText = "ΑΝΑΜΝΗΣΗ ΒΡΕΘΗΚΕ!";
-                    setTimeout(() => { if(!this.levelWon) this.messageUI.innerText = "ΨΑΞΕ ΣΤΟ ΣΚΟΤΑΔΙ..."; }, 1500);
+                    // Αλλαγή Χρώματος (Αναλόγως της προόδου - TRON Cyan)
+                    this.walls.forEach(wall => wall.setAttribute('material', `color: ${TRON_COLORS.skyBlack}; emissive: ${TRON_COLORS.heroCyan}; emissiveIntensity: 0.8; wireframe: true`));
+                    this.messageUI.innerText = "ΔΕΔΟΜΕΝΑ ΕΝΣΩΜΑΤΩΘΗΚΑΝ";
+                    setTimeout(() => { if(!this.levelWon) this.messageUI.innerText = "ΨΑΞΕ ΣΤΟ 'GRID'..."; }, 1500);
                 }
             },
 
             updateUI: function() {
-                this.invUI.innerText = `ΑΝΑΜΝΗΣΕΙΣ: ${this.shardsCollected} / ${this.totalShards}`;
+                this.invUI.innerText = `DISCS: ${this.shardsCollected} / ${this.totalShards}`;
+                this.invUI.style.color = TRON_COLORS.heroCyan;
+                this.invUI.style.borderColor = TRON_COLORS.heroCyan;
             },
 
             nextLevel: function() {
                 this.levelWon = true;
                 if (this.currentLevel >= this.maxLevels) {
                     this.wonGame = true;
-                    this.messageUI.innerText = "ΤΕΡΜΑΤΙΣΕΣ ΤΟ ΠΑΙΧΝΙΔΙ!\nΤΟ ΔΙΚΤΥΟ ΘΕΡΑΠΕΥΤΗΚΕ.";
-                    this.messageUI.style.color = "#00ff00";
+                    this.messageUI.innerText = "ΤΟ 'GRID' ΕΙΝΑΙ ΕΛΕΥΘΕΡΟ!\nSAM FLYNN, ΕΠΕΣΤΡΕΨΕΣ.";
+                    this.messageUI.style.color = TRON_COLORS.dataWhite;
+                    this.messageUI.style.borderColor = TRON_COLORS.heroCyan;
                     this.invUI.style.display = 'none';
                     this.levelUI.style.display = 'none';
+                    this.el.setAttribute('background', `color: ${TRON_COLORS.heroCyan}`);
                 } else {
-                    this.messageUI.innerText = "ΠΥΛΗ ΑΝΟΙΧΤΗ!\nΦΟΡΤΩΣΗ ΕΠΟΜΕΝΟΥ ΕΠΙΠΕΔΟΥ...";
+                    this.messageUI.innerText = "ΠΟΡΤΑΛ ΑΝΟΙΧΤΟ!\nΜΕΤΑΦΟΡΑ ΣΕ ΝΕΟ ΤΟΜΕΑ...";
                     this.currentLevel++;
                     setTimeout(() => this.loadLevel(this.currentLevel), 3000);
                 }
@@ -224,28 +254,29 @@
 <body style="margin: 0; overflow: hidden; background-color: #000;">
 
     <div style="position: absolute; top: 5%; left: 0; width: 100%; text-align: center; z-index: 100; pointer-events: none;">
-        <div id="hud-level" style="color: #ffff00; font-family: 'Courier New', Courier, monospace; font-size: 1.5rem; font-weight: bold; background: rgba(0, 0, 0, 0.7); display: inline-block; padding: 5px 15px; border-radius: 5px; margin-bottom: 5px;">
-            ΕΠΙΠΕΔΟ: 1 / 10
+        <div id="hud-level" style="color: #FFD700; font-family: 'Courier New', Courier, monospace; font-size: 1.5rem; font-weight: bold; background: rgba(0, 0, 0, 0.9); display: inline-block; padding: 5px 15px; border-radius: 2px; margin-bottom: 5px; border: 1px solid #FFD700; text-transform: uppercase;">
+            SECTOR: 1 / 10
         </div>
         <br>
-        <div id="hud-message" style="color: #ffffff; font-family: 'Courier New', Courier, monospace; font-size: 1.2rem; text-shadow: 2px 2px 0px #000; background: rgba(0, 0, 0, 0.7); display: inline-block; padding: 10px 20px; border-radius: 5px; border: 1px solid #ffffff; white-space: pre-line; text-transform: uppercase; margin-bottom: 5px;">
-            ΒΡΕΣ ΤΙΣ ΚΡΥΜΜΕΝΕΣ ΑΝΑΜΝΗΣΕΙΣ
+        <div id="hud-message" style="color: #ffffff; font-family: 'Courier New', Courier, monospace; font-size: 1.2rem; background: rgba(0, 0, 0, 0.9); display: inline-block; padding: 10px 20px; border-radius: 2px; border: 2px solid #00FFFF; white-space: pre-line; text-transform: uppercase; margin-bottom: 5px; letter-spacing: 2px;">
+            ΑΝΑΚΤΗΣΕ ΤΑ ΔΕΔΟΜΕΝΑ
         </div>
         <br>
-        <div id="hud-inv" style="color: #00ffff; font-family: 'Courier New', Courier, monospace; font-size: 1.2rem; font-weight: bold; background: rgba(0, 0, 0, 0.8); display: inline-block; padding: 8px 15px; border-radius: 5px; border: 1px solid #00ffff;">
-            ΑΝΑΜΝΗΣΕΙΣ: 0 / 2
+        <div id="hud-inv" style="color: #00FFFF; font-family: 'Courier New', Courier, monospace; font-size: 1.2rem; font-weight: bold; background: rgba(0, 0, 0, 0.9); display: inline-block; padding: 8px 15px; border-radius: 2px; border: 1px solid #00FFFF;">
+            DISCS: 0 / 2
         </div>
     </div>
 
-    <a-scene procedural-maze background="color: #111122">
-        <a-light type="ambient" intensity="0.8" color="#ffffff"></a-light>
+    <a-scene procedural-maze background="color: #000000" fog="type: exponential; color: #000000; density: 0.03;">
         
-        <a-plane id="floor-grid" position="50 0 50" rotation="-90 0 0" width="300" height="300" color="#ff0055" wireframe="true"></a-plane>
+        <a-light type="ambient" intensity="0.2" color="#444466"></a-light>
+        
+        <a-plane id="floor-grid" position="50 0 50" rotation="-90 0 0" width="300" height="300" color="#0000FF" wireframe="true" wireframe-linewidth="1" material="shader: flat"></a-plane>
 
         <a-entity id="maze-container"></a-entity>
 
         <a-entity id="camera" camera look-controls wasd-controls="acceleration: 25">
-            <a-light type="point" intensity="1" distance="15" color="#ffffff" position="0 0 -1"></a-light>
+            <a-light type="point" intensity="1" distance="15" color="#00FFFF" position="0 0 -1"></a-light>
         </a-entity>
     </a-scene>
 

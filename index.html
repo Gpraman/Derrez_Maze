@@ -7,6 +7,7 @@
     <script>
         const CELL_SIZE = 4;
         
+        // TRON Χρωματική Παλέτα
         const TRON_COLORS = {
             heroCyan: '#00FFFF',
             enemyOrange: '#FF4500',
@@ -15,6 +16,7 @@
             skyBlack: '#000000'
         };
 
+        // ΜΗΧΑΝΗ ΗΧΟΥ
         const SoundEngine = {
             ctx: null,
             init: function() {
@@ -84,7 +86,6 @@
             playVictory: function() {
                 this.init();
                 if (!this.ctx) return;
-                // Μια "αιθέρια" συγχορδία για το τέλος
                 [523.25, 659.25, 783.99, 1046.50].forEach(freq => {
                     let osc = this.ctx.createOscillator();
                     let gain = this.ctx.createGain();
@@ -110,6 +111,7 @@
                 this.levelUI = document.querySelector('#hud-level');
                 this.timerUI = document.querySelector('#hud-timer');
                 this.floor = document.querySelector('#floor-grid');
+                this.skyEl = document.querySelector('#sky-bg'); 
                 
                 this.currentLevel = 1;
                 this.maxLevels = 10;
@@ -160,6 +162,11 @@
                 this.shardsCollected = 0;
                 this.levelWon = false;
                 this.activeWallColor = this.heroColorObj; 
+
+                // --- ΔΥΝΑΜΙΚΗ ΦΟΡΤΩΣΗ ΕΙΚΟΝΑΣ 360 ΒΑΣΕΙ LEVEL ---
+                if (this.skyEl) {
+                    this.skyEl.setAttribute('src', `image${level}.jpg`);
+                }
 
                 let mapSize = 7 + (level * 2); 
                 this.totalShards = 2 + Math.floor(level / 2); 
@@ -379,18 +386,14 @@
                 this.timerActive = false;
                 
                 if (this.currentLevel >= this.maxLevels) {
-                    // --- Η ΤΕΛΙΚΗ ΕΚΠΛΗΞΗ (ASCENSION) ---
                     this.wonGame = true;
                     
-                    // 1. Κλείσιμο μουσικής, άνοιγμα "θεϊκού" ήχου
                     let bgm = document.querySelector('#bgm');
                     if(bgm) bgm.pause();
                     SoundEngine.playVictory();
 
-                    // 2. Απενεργοποίηση ελέγχου (WASD)
                     this.player.removeAttribute('wasd-controls');
 
-                    // 3. Εξαφάνιση UI
                     this.invUI.style.display = 'none';
                     this.levelUI.style.display = 'none';
                     this.timerUI.style.display = 'none';
@@ -399,20 +402,17 @@
                     this.messageUI.style.color = TRON_COLORS.dataWhite;
                     this.messageUI.style.borderColor = TRON_COLORS.dataWhite;
 
-                    // 4. Η Ανάληψη: Η κάμερα απογειώνεται προς τον ουρανό
                     let currPos = this.player.getAttribute('position');
                     this.player.setAttribute('animation__ascend', `property: position; to: ${currPos.x} 100 ${currPos.z}; dur: 8000; easing: easeInOutCubic`);
                     
-                    // 5. Η Κατάρρευση: Οι τοίχοι του λαβύρινθου πέφτουν στο κενό ένας-ένας
                     this.walls.forEach((wall) => {
-                        let delay = Math.random() * 3000; // Τυχαία καθυστέρηση για κάθε τοίχο
+                        let delay = Math.random() * 3000; 
                         setTimeout(() => {
                             let wPos = wall.object3D.position;
                             wall.setAttribute('animation__fall', `property: position; to: ${wPos.x} -50 ${wPos.z}; dur: 4000; easing: easeInQuad`);
                         }, delay);
                     });
 
-                    // 6. Το τελικό μήνυμα
                     setTimeout(() => {
                         this.messageUI.innerHTML = "ΕΞΟΔΟΣ ΑΠΟ ΤΟ GRID ΕΠΙΤΥΧΗΣ<br><br>ΕΡΓΑΣΙΑ: ΕΙΚΟΝΙΚΗ ΠΡΑΓΜΑΤΙΚΟΤΗΤΑ II";
                     }, 6000);
@@ -447,7 +447,10 @@
         </div>
     </div>
 
-    <a-scene procedural-maze background="color: #000000" fog="type: exponential; color: #000000; density: 0.03;">
+    <a-scene procedural-maze fog="type: exponential; color: #000000; density: 0.015;">
+        
+        <a-sky id="sky-bg" src="image1.jpg" rotation="0 -90 0"></a-sky>
+
         <a-light type="ambient" intensity="0.2" color="#444466"></a-light>
         <a-plane id="floor-grid" position="50 0 50" rotation="-90 0 0" width="300" height="300" color="#0000FF" wireframe="true" wireframe-linewidth="1" material="shader: flat"></a-plane>
         <a-entity id="maze-container"></a-entity>

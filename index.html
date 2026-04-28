@@ -125,6 +125,7 @@
                 this.enemyColorObj = new THREE.Color(TRON_COLORS.enemyOrange);
                 this.activeWallColor = this.heroColorObj;
                 
+                // Ενεργοποίηση της μουσικής με το πρώτο κλικ στην οθόνη
                 window.addEventListener('click', () => {
                     SoundEngine.init();
                     let bgm = document.querySelector('#bgm');
@@ -449,7 +450,7 @@
 
     <a-scene procedural-maze fog="type: exponential; color: #000000; density: 0.015;">
         
-        <a-sky id="sky-bg" src="image1.jpg" rotation="0 -90 0"></a-sky>
+        <a-sky id="sky-bg" src="image1.jpg" rotation="0 -90 0" material="fog: false"></a-sky>
 
         <a-light type="ambient" intensity="0.2" color="#444466"></a-light>
         <a-plane id="floor-grid" position="50 0 50" rotation="-90 0 0" width="300" height="300" color="#0000FF" wireframe="true" wireframe-linewidth="1" material="shader: flat"></a-plane>

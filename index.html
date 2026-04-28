@@ -14,14 +14,13 @@
             dataWhite: '#FFFFFF',
             gridBlue: '#0000FF',
             skyBlack: '#000000',
-            // Επιπλέον Neon Χρώματα για την εναλλαγή
             neonMagenta: '#FF00FF',
             neonLime: '#00FF00',
             neonPurple: '#BF00FF',
-            neonYellow: '#FFFF00'
+            neonYellow: '#FFFF00',
+            virusRed: '#FF0000' // Το χρώμα του Ιού
         };
 
-        // Λίστα χρωμάτων για την εναλλαγή κατά τη συλλογή
         const COLOR_CYCLE = [
             TRON_COLORS.heroCyan, 
             TRON_COLORS.neonMagenta, 
@@ -128,6 +127,7 @@
                 
                 this.timeRemaining = 0;
                 this.timerActive = false;
+                this.virus = null;
                 
                 this.activeWallColor = new THREE.Color(TRON_COLORS.heroCyan);
                 this.enemyColorObj = new THREE.Color(TRON_COLORS.enemyOrange);
@@ -168,8 +168,8 @@
                 this.exitEl = null;
                 this.shardsCollected = 0;
                 this.levelWon = false;
+                this.virus = null; // Επαναφορά ιού
                 
-                // Επαναφορά στο αρχικό Cyan χρώμα σε κάθε νέα πίστα
                 this.activeWallColor.set(TRON_COLORS.heroCyan);
 
                 if (this.skyEl) {
@@ -251,6 +251,41 @@
                 exitLight.setAttribute('distance', 15);
                 this.exitEl.appendChild(exitLight);
 
+                // --- ΔΗΜΙΟΥΡΓΙΑ ΤΟΥ ΠΑΛΛΟΜΕΝΟΥ ΙΟΥ (VIRUS MASS) ---
+                this.virus = document.createElement('a-entity');
+                let virusStartX = (mapSize - 2) * CELL_SIZE; // Στην άλλη άκρη του λαβύρινθου
+                let virusStartZ = (mapSize - 2) * CELL_SIZE;
+                this.virus.setAttribute('position', `${virusStartX} 1.6 ${virusStartZ}`);
+
+                // Προσθήκη 5 ακανόνιστων στοιχείων για να μοιάζει με μάζα
+                for(let i=0; i<5; i++) {
+                    let blob = document.createElement('a-dodecahedron');
+                    let ox = (Math.random() - 0.5) * 1.5;
+                    let oy = (Math.random() - 0.5) * 1.5;
+                    let oz = (Math.random() - 0.5) * 1.5;
+                    blob.setAttribute('position', `${ox} ${oy} ${oz}`);
+                    blob.setAttribute('radius', Math.random() * 0.6 + 0.4);
+                    blob.setAttribute('material', `color: #000000; emissive: ${TRON_COLORS.virusRed}; emissiveIntensity: 2; wireframe: true`);
+                    
+                    let dur = 400 + Math.random() * 400; // Τυχαία ταχύτητα παλμού
+                    blob.setAttribute('animation__scale', `property: scale; dir: alternate; dur: ${dur}; to: 1.4 1.4 1.4; loop: true`);
+                    blob.setAttribute('animation__rot', `property: rotation; dur: ${dur*4}; to: ${Math.random()*360} ${Math.random()*360} ${Math.random()*360}; loop: true; easing: linear`);
+                    
+                    this.virus.appendChild(blob);
+                }
+
+                // Το έντονο κόκκινο φως που τον ακολουθεί
+                let vLight = document.createElement('a-light');
+                vLight.setAttribute('type', 'point');
+                vLight.setAttribute('color', TRON_COLORS.virusRed);
+                vLight.setAttribute('intensity', '2');
+                vLight.setAttribute('distance', '10');
+                vLight.setAttribute('animation__pulse', `property: intensity; dir: alternate; dur: 500; to: 5; loop: true`);
+                this.virus.appendChild(vLight);
+
+                this.mazeContainer.appendChild(this.virus);
+                // ----------------------------------------------------
+
                 this.player.setAttribute('position', `${1 * CELL_SIZE} 1.6 ${1 * CELL_SIZE}`);
                 this.lastPos.copy(this.player.getAttribute('position'));
                 
@@ -266,24 +301,51 @@
             tick: function (time, timeDelta) {
                 if (this.wonGame || this.levelWon) return;
 
+                let pPos = this.player.object3D.position;
+
+                // --- ΛΟΓΙΚΗ ΧΡΟΝΟΜΕΤΡΟΥ ΚΑΙ ΙΟΥ ---
                 if (this.timerActive) {
                     this.timeRemaining -= (timeDelta / 1000); 
                     if (this.timeRemaining <= 0) {
                         this.timeRemaining = 0;
-                        this.triggerGameOver();
+                        this.triggerGameOver('timeout');
                     }
                     this.updateTimerUI();
+
+                    // --- ΚΙΝΗΣΗ ΙΟΥ ΠΡΟΣ ΤΟΝ ΠΑΙΚΤΗ ---
+                    if (this.virus) {
+                        let vPos = this.virus.object3D.position;
+                        let distToPlayer = vPos.distanceTo(pPos);
+                        
+                        // Αν σε πιάσει (απόσταση μικρότερη από 2.0 μέτρα)
+                        if (distToPlayer < 2.0) {
+                            this.triggerGameOver('virus');
+                            this.virus = null;
+                        } else {
+                            // Ταχύτητα: Κανονική = 1.5 | Εξαγριωμένη (κάτω από 20s) = 4.5
+                            let speed = this.timeRemaining < 20 ? 4.5 : 1.5; 
+                            
+                            // Υπολογισμός κατεύθυνσης
+                            let dir = new THREE.Vector3().subVectors(pPos, vPos).normalize();
+                            
+                            // Κίνηση ομαλή
+                            vPos.x += dir.x * speed * (timeDelta / 1000);
+                            vPos.z += dir.z * speed * (timeDelta / 1000);
+                            
+                            // Μικρή αιώρηση πάνω-κάτω για έξτρα "οργανική" αίσθηση
+                            vPos.y = 1.6 + Math.sin(time / 200) * 0.3;
+                        }
+                    }
                 }
 
-                let pos = this.player.getAttribute('position');
-                let gridX = Math.round(pos.x / CELL_SIZE);
-                let gridZ = Math.round(pos.z / CELL_SIZE);
+                let gridX = Math.round(pPos.x / CELL_SIZE);
+                let gridZ = Math.round(pPos.z / CELL_SIZE);
 
                 let rezRadius = 16; 
                 this.walls.forEach(wall => {
                     let mesh = wall.getObject3D('mesh');
                     if (mesh && mesh.material) {
-                        let dist = pos.distanceTo(wall.object3D.position);
+                        let dist = pPos.distanceTo(wall.object3D.position);
                         let intensity = Math.max(0.0, 1 - (dist / rezRadius));
                         
                         mesh.material.emissive.copy(this.activeWallColor);
@@ -295,7 +357,7 @@
                 let visibilityRadius = 5; 
                 this.shards.forEach(shard => {
                     if (shard.parentNode) {
-                        let dist = pos.distanceTo(shard.object3D.position);
+                        let dist = pPos.distanceTo(shard.object3D.position);
                         if (dist < visibilityRadius) {
                             shard.setAttribute('visible', 'true');
                         } else {
@@ -320,10 +382,10 @@
                     if (tileType === 1) {
                         this.player.setAttribute('position', this.lastPos);
                     } else {
-                        this.lastPos.copy(pos);
+                        this.lastPos.copy(pPos);
                     }
                 } else {
-                    this.lastPos.copy(pos);
+                    this.lastPos.copy(pPos);
                 }
             },
 
@@ -333,9 +395,7 @@
                 
                 SoundEngine.playDiscCollect();
 
-                // --- ΑΛΛΑΓΗ ΧΡΩΜΑΤΟΣ ΤΟΙΧΩΝ ---
                 if (this.shardsCollected < this.totalShards) {
-                    // Επιλογή επόμενου χρώματος από τον κύκλο
                     let nextColorHex = COLOR_CYCLE[this.shardsCollected % COLOR_CYCLE.length];
                     this.activeWallColor.set(nextColorHex);
                     this.floor.setAttribute('color', nextColorHex);
@@ -351,14 +411,19 @@
 
                 if (this.shardsCollected === this.totalShards) {
                     SoundEngine.playPortalOpen();
-                    this.timerActive = false; 
+                    this.timerActive = false;
+                    
+                    // Καταστροφή του Ιού όταν ανοίξει το Portal (Σωτηρία!)
+                    if(this.virus && this.virus.parentNode) {
+                        this.virus.parentNode.removeChild(this.virus);
+                        this.virus = null;
+                    }
 
                     this.messageUI.innerText = "PORTAL ΕΝΕΡΓΟΠΟΙΗΘΗΚΕ!";
                     this.messageUI.style.color = TRON_COLORS.enemyOrange;
                     this.messageUI.style.borderColor = TRON_COLORS.enemyOrange;
                     this.exitEl.setAttribute('visible', 'true');
                     
-                    // Τελικό χρώμα Πορτοκαλί για την έξοδο
                     this.activeWallColor.copy(this.enemyColorObj);
                     this.floor.setAttribute('color', TRON_COLORS.enemyOrange);
                 } else {
@@ -369,25 +434,35 @@
                 }
             },
 
-            triggerGameOver: function() {
+            triggerGameOver: function(reason) {
                 this.timerActive = false;
                 SoundEngine.playDerezzed();
-                this.messageUI.innerText = "DEREZZED...\nΕΠΑΝΑΦΟΡΑ ΣΥΣΤΗΜΑΤΟΣ.";
-                this.messageUI.style.color = TRON_COLORS.enemyOrange;
-                this.messageUI.style.borderColor = TRON_COLORS.enemyOrange;
-                this.activeWallColor.copy(this.enemyColorObj);
-                this.floor.setAttribute('color', TRON_COLORS.enemyOrange);
+                
+                // Δυναμικό μήνυμα ανάλογα με το αν σε έπιασε ο ιός ή τελείωσε ο χρόνος
+                if (reason === 'virus') {
+                    this.messageUI.innerText = "ΚΡΙΣΙΜΟ ΣΦΑΛΜΑ: ΜΟΛΥΝΣΗ ΑΠΟ ΙΟ\nΕΠΑΝΑΦΟΡΑ ΣΥΣΤΗΜΑΤΟΣ.";
+                } else {
+                    this.messageUI.innerText = "DEREZZED: ΤΕΛΟΣ ΧΡΟΝΟΥ\nΕΠΑΝΑΦΟΡΑ ΣΥΣΤΗΜΑΤΟΣ.";
+                }
+
+                this.messageUI.style.color = TRON_COLORS.virusRed;
+                this.messageUI.style.borderColor = TRON_COLORS.virusRed;
+                this.activeWallColor.set(TRON_COLORS.virusRed);
+                this.floor.setAttribute('color', TRON_COLORS.virusRed);
+                
                 setTimeout(() => this.loadLevel(this.currentLevel), 3000);
             },
 
             updateTimerUI: function() {
                 let secs = Math.ceil(this.timeRemaining);
                 this.timerUI.innerText = `TIME: ${secs}s`;
-                if (secs <= 10) {
-                    this.timerUI.style.color = TRON_COLORS.enemyOrange;
-                    this.timerUI.style.borderColor = TRON_COLORS.enemyOrange;
+                
+                if (secs <= 20) {
+                    // Οπτική προειδοποίηση ότι ο Ιός εξαγριώθηκε (Κόκκινο)
+                    this.timerUI.style.color = TRON_COLORS.virusRed;
+                    this.timerUI.style.borderColor = TRON_COLORS.virusRed;
                 } else {
-                    this.timerUI.style.color = this.activeWallColor.getStyle(); // Το timer ακολουθεί το τρέχον neon χρώμα
+                    this.timerUI.style.color = this.activeWallColor.getStyle(); 
                     this.timerUI.style.borderColor = this.activeWallColor.getStyle();
                 }
             },

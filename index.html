@@ -18,7 +18,8 @@
             neonLime: '#00FF00',
             neonPurple: '#BF00FF',
             neonYellow: '#FFFF00',
-            virusRed: '#FF0000'
+            virusRed: '#FF0000',
+            virusGlitch: '#FF3300' // Πιο έντονο, "σπασμένο" κόκκινο
         };
 
         const COLOR_CYCLE = [
@@ -181,6 +182,7 @@
                 this.shardsCollected = 0;
                 this.levelWon = false;
                 this.virus = null; 
+                this.virusTendrils = []; // Λίστα για τα πλοκάμια
                 
                 this.activeWallColor.set(TRON_COLORS.heroCyan);
 
@@ -263,77 +265,86 @@
                 exitLight.setAttribute('distance', 15);
                 this.exitEl.appendChild(exitLight);
 
+                // --- ΝΕΟΣ, ΑΠΕΙΛΗΤΙΚΟΣ ΙΟΣ: THE GLITCH CORRUPTION ---
                 this.virus = document.createElement('a-entity');
                 let virusStartX = (this.mapSize - 2) * CELL_SIZE; 
                 let virusStartZ = (this.mapSize - 2) * CELL_SIZE;
                 this.virus.setAttribute('position', `${virusStartX} 1.6 ${virusStartZ}`);
 
-                for(let i=0; i<5; i++) {
-                    let blob = document.createElement('a-dodecahedron');
-                    let ox = (Math.random() - 0.5) * 1.5;
-                    let oy = (Math.random() - 0.5) * 1.5;
-                    let oz = (Math.random() - 0.5) * 1.5;
-                    blob.setAttribute('position', `${ox} ${oy} ${oz}`);
-                    blob.setAttribute('radius', Math.random() * 0.6 + 0.4);
-                    blob.setAttribute('material', `color: #000000; emissive: ${TRON_COLORS.virusRed}; emissiveIntensity: 2; wireframe: true`);
+                // 1. Ο "Glitch" Πυρήνας (Ακανόνιστο σύννεφο που στριφογυρίζει)
+                let core = document.createElement('a-tetrahedron');
+                core.setAttribute('radius', '1.2');
+                core.setAttribute('material', `color: #000000; emissive: ${TRON_COLORS.virusGlitch}; emissiveIntensity: 1; wireframe: true; wireframeLinewidth: 2`);
+                core.setAttribute('animation__rot', `property: rotation; dur: 1000; to: 360 360 360; loop: true; easing: linear`);
+                core.setAttribute('animation__glitch', `property: scale; dir: alternate; dur: 200; to: 1.1 0.8 1.2; loop: true; easing: easeInOutSine`);
+                this.virus.appendChild(core);
+
+                // 2. Τα "Electric Tendrils" (Πלוκάμια Ενέργειας)
+                // Δημιουργούμε 4 παλλόμενους δακτυλίους που δονούνται βίαια
+                for (let i = 0; i < 4; i++) {
+                    let tendril = document.createElement('a-torus');
+                    tendril.setAttribute('radius', 1.0 + (i * 0.2));
+                    tendril.setAttribute('radius-tubular', '0.02');
                     
-                    let dur = 400 + Math.random() * 400; 
-                    blob.setAttribute('animation__scale', `property: scale; dir: alternate; dur: ${dur}; to: 1.4 1.4 1.4; loop: true`);
-                    blob.setAttribute('animation__rot', `property: rotation; dur: ${dur*4}; to: ${Math.random()*360} ${Math.random()*360} ${Math.random()*360}; loop: true; easing: linear`);
+                    // Τυχαίος αρχικός άξονας περιστροφής
+                    let rx = Math.random() * 360;
+                    let ry = Math.random() * 360;
+                    tendril.setAttribute('rotation', `${rx} ${ry} 0`);
                     
-                    this.virus.appendChild(blob);
+                    tendril.setAttribute('material', `color: #000000; emissive: ${TRON_COLORS.virusRed}; emissiveIntensity: 4; shader: flat; transparent: true; opacity: 0.8`);
+                    
+                    // Δυναμική κίνηση πλοκαμιών: Στριφογυρίζουν και πάλλονται
+                    let rotDur = 2000 + (i * 500);
+                    tendril.setAttribute('animation__rot', `property: rotation; dur: ${rotDur}; to: ${rx + 360} ${ry - 360} 360; loop: true; easing: linear`);
+                    
+                    // Δόνηση (Vibration) για οργανική αίσθηση
+                    let vibDur = 100 + (i * 50);
+                    tendril.setAttribute('animation__vib', `property: scale; dir: alternate; dur: ${vibDur}; to: 1.05 0.95 1.05; loop: true; easing: linear`);
+                    
+                    this.virus.appendChild(tendril);
+                    this.virusTendrils.push(tendril); // Αποθήκευση για την "εξαγρίωση"
                 }
 
+                // 3. Το απειλητικό φως
                 let vLight = document.createElement('a-light');
                 vLight.setAttribute('type', 'point');
-                vLight.setAttribute('color', TRON_COLORS.virusRed);
-                vLight.setAttribute('intensity', '2');
-                vLight.setAttribute('distance', '10');
-                vLight.setAttribute('animation__pulse', `property: intensity; dir: alternate; dur: 500; to: 5; loop: true`);
+                vLight.setAttribute('color', TRON_COLORS.virusGlitch);
+                vLight.setAttribute('intensity', '3');
+                vLight.setAttribute('distance', '12');
+                vLight.setAttribute('animation__flicker', `property: intensity; dir: alternate; dur: 100; to: 1; loop: true; easing: linear`);
                 this.virus.appendChild(vLight);
 
                 this.mazeContainer.appendChild(this.virus);
+                // -------------------------------------------------------------------
 
                 this.player.setAttribute('position', `${1 * CELL_SIZE} 1.6 ${1 * CELL_SIZE}`);
                 this.lastPos.copy(this.player.getAttribute('position'));
                 
                 this.floor.setAttribute('color', TRON_COLORS.gridBlue);
                 this.levelUI.innerText = `SECTOR: ${this.currentLevel} / ${this.maxLevels}`;
-                this.messageUI.innerText = "ΚΛΙΚ ΓΙΑ ΕΝΑΡΞΗ | [M] ΓΙΑ RADAR"; // Ενημέρωση UI για το κουμπί
+                this.messageUI.innerText = "ΚΛΙΚ ΓΙΑ ΕΝΑΡΞΗ | [M] ΓΙΑ RADAR";
                 this.messageUI.style.color = TRON_COLORS.dataWhite;
                 this.messageUI.style.borderColor = TRON_COLORS.heroCyan;
                 this.updateUI();
                 this.updateTimerUI();
             },
 
-            // ΒΕΛΤΙΩΜΕΝΟ ΚΥΚΛΙΚΟ MINIMAP (RADAR)
             updateMinimap: function() {
                 if (!this.currentMap || !this.minimapCtx) return;
-
                 let ctx = this.minimapCtx;
                 let size = 256;
                 let mapLen = this.mapSize;
                 let cSize = size / mapLen;
-
                 ctx.clearRect(0, 0, size, size);
-
-                // Δημιουργία Κυκλικού "Τζαμιού" 
                 ctx.save();
                 ctx.beginPath();
                 ctx.arc(size / 2, size / 2, size / 2 - 4, 0, 2 * Math.PI);
-                
-                // Ημιδιάφανο φόντο ραντάρ
                 ctx.fillStyle = 'rgba(0, 15, 30, 0.4)';
                 ctx.fill();
-                
-                // Λεπτό εξωτερικό περίγραμμα
                 ctx.lineWidth = 3;
                 ctx.strokeStyle = 'rgba(0, 255, 255, 0.3)';
                 ctx.stroke();
-                
-                ctx.clip(); // Περιορίζει τα πάντα μέσα στον κύκλο
-
-                // Ζωγραφική Λαβύρινθου (Διακριτικά μπλε τετράγωνα)
+                ctx.clip(); 
                 ctx.fillStyle = 'rgba(0, 255, 255, 0.15)'; 
                 for (let z = 0; z < mapLen; z++) {
                     for (let x = 0; x < mapLen; x++) {
@@ -342,16 +353,12 @@
                         }
                     }
                 }
-
-                // Σταυρόνημα Ραντάρ (Crosshair lines)
                 ctx.beginPath();
                 ctx.moveTo(size / 2, 0); ctx.lineTo(size / 2, size);
                 ctx.moveTo(0, size / 2); ctx.lineTo(size, size / 2);
                 ctx.lineWidth = 1;
                 ctx.strokeStyle = 'rgba(0, 255, 255, 0.1)';
                 ctx.stroke();
-
-                // Ζωγραφική Παίκτη (Cyan Κουκκίδα)
                 let pPos = this.player.object3D.position;
                 let px = (pPos.x / (mapLen * CELL_SIZE)) * size;
                 let pz = (pPos.z / (mapLen * CELL_SIZE)) * size;
@@ -359,8 +366,6 @@
                 ctx.beginPath();
                 ctx.arc(px, pz, cSize / 1.5, 0, 2 * Math.PI);
                 ctx.fill();
-
-                // Ζωγραφική Ιού (Κόκκινη Κουκκίδα)
                 if (this.virus) {
                     let vPos = this.virus.object3D.position;
                     let vx = (vPos.x / (mapLen * CELL_SIZE)) * size;
@@ -370,9 +375,7 @@
                     ctx.arc(vx, vz, cSize / 1.2, 0, 2 * Math.PI);
                     ctx.fill();
                 }
-
                 ctx.restore();
-
                 if (this.minimapPlane && this.minimapPlane.getObject3D('mesh')) {
                     let material = this.minimapPlane.getObject3D('mesh').material;
                     if (material.map) material.map.needsUpdate = true;
@@ -383,7 +386,6 @@
                 if (this.wonGame || this.levelWon) return;
 
                 let pPos = this.player.object3D.position;
-
                 this.updateMinimap();
 
                 if (this.timerActive) {
@@ -398,16 +400,27 @@
                         let vPos = this.virus.object3D.position;
                         let distToPlayer = vPos.distanceTo(pPos);
                         
-                        if (distToPlayer < 2.0) {
+                        if (distToPlayer < 2.5) { // Αυξημένη ακτίνα μόλυνσης λόγω πλοκαμιών
                             this.triggerGameOver('virus');
                             this.virus = null;
                         } else {
-                            let speed = this.timeRemaining < 20 ? 4.5 : 1.5; 
-                            let dir = new THREE.Vector3().subVectors(pPos, vPos).normalize();
+                            // --- ΛΟΓΙΚΗ ΚΙΝΗΣΗΣ ΚΑΙ "ΕΞΑΓΡΙΩΣΗΣ" ΙΟΥ ---
+                            let speeds = { normal: 1.5, frenzy: 4.8 };
+                            let isFrenzy = this.timeRemaining < 20;
+                            let speed = isFrenzy ? speeds.frenzy : speeds.normal; 
                             
+                            // Αν εξαγριωθεί, τα πλοκάμια δονούνται βίαια (Glitch frenzy)
+                            if (isFrenzy && this.virusTendrils) {
+                                this.virusTendrils.forEach(tendril => {
+                                    tendril.setAttribute('animation__vib', 'dur: 50; to: 1.2 0.8 1.2'); // Πολύ πιο γρήγορος και έντονος παλμός
+                                });
+                            }
+
+                            let dir = new THREE.Vector3().subVectors(pPos, vPos).normalize();
                             vPos.x += dir.x * speed * (timeDelta / 1000);
                             vPos.z += dir.z * speed * (timeDelta / 1000);
-                            vPos.y = 1.6 + Math.sin(time / 200) * 0.3;
+                            // Πιο έντονη "οργανική" αιώρηση
+                            vPos.y = 1.6 + Math.sin(time / 150) * 0.4;
                         }
                     }
                 }

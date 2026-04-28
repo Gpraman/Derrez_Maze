@@ -112,6 +112,11 @@
                 this.activeWallColor.set(TRON_COLORS.heroCyan);
                 if (this.skyEl) this.skyEl.setAttribute('src', `image${level}.jpg`);
 
+                // Διόρθωση: Ενημέρωση του Sector HUD
+                if (this.levelUI) {
+                    this.levelUI.innerText = `SECTOR: ${level} / ${this.maxLevels}`;
+                }
+
                 this.mapSize = 7 + (level * 2); 
                 this.totalShards = 2 + Math.floor(level / 2); 
                 this.currentMap = this.generateMap(this.mapSize);
@@ -132,7 +137,6 @@
                             let wall = document.createElement('a-box');
                             wall.setAttribute('position', `${x * CELL_SIZE} 2 ${z * CELL_SIZE}`);
                             wall.setAttribute('width', CELL_SIZE); wall.setAttribute('height', 4); wall.setAttribute('depth', CELL_SIZE);
-                            // Προσθήκη side: double για να είναι συμπαγές το υλικό και από τις δύο πλευρές
                             wall.setAttribute('material', `color: #050505; roughness: 0.2; metalness: 0.8; side: double`);
                             this.mazeContainer.appendChild(wall);
                             this.walls.push(wall);
@@ -333,7 +337,7 @@
     <canvas id="minimap-canvas" width="256" height="256" style="display:none;"></canvas>
     <audio id="bgm" src="music.mp3" loop="true"></audio> 
     <div style="position: absolute; top: 5%; width: 100%; text-align: center; z-index: 100; pointer-events: none; font-family: monospace;">
-        <div id="hud-level" style="color: #FFD700; background: rgba(0,0,0,0.8); padding: 5px 15px; border: 1px solid #FFD700; display: inline-block;">SECTOR: 1</div>
+        <div id="hud-level" style="color: #FFD700; background: rgba(0,0,0,0.8); padding: 5px 15px; border: 1px solid #FFD700; display: inline-block;">SECTOR: 1 / 10</div>
         <div id="hud-timer" style="color: #00FFFF; background: rgba(0,0,0,0.8); padding: 5px 15px; border: 1px solid #00FFFF; display: inline-block; margin-left: 10px;">TIME: 60s</div>
         <br><div id="hud-message" style="color: #fff; background: rgba(0,0,0,0.8); padding: 10px; border: 2px solid #00FFFF; display: inline-block; margin-top: 5px;">ΦΟΡΤΩΣΗ...</div>
         <br><div id="hud-inv" style="color: #00FFFF; background: rgba(0,0,0,0.8); padding: 5px; border: 1px solid #00FFFF; display: inline-block; margin-top: 5px;">DISCS: 0</div>

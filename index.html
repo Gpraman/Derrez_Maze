@@ -18,7 +18,7 @@
             neonLime: '#00FF00',
             neonPurple: '#BF00FF',
             neonYellow: '#FFFF00',
-            virusRed: '#FF0000' // Το χρώμα του Ιού
+            virusRed: '#FF0000'
         };
 
         const COLOR_CYCLE = [
@@ -46,10 +46,8 @@
                 let gain = this.ctx.createGain();
                 osc.type = type;
                 osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-                
                 gain.gain.setValueAtTime(vol, this.ctx.currentTime);
                 gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
-                
                 osc.connect(gain);
                 gain.connect(this.ctx.destination);
                 osc.start();
@@ -132,6 +130,11 @@
                 this.activeWallColor = new THREE.Color(TRON_COLORS.heroCyan);
                 this.enemyColorObj = new THREE.Color(TRON_COLORS.enemyOrange);
                 
+                // Προετοιμασία Minimap
+                this.minimapCanvas = document.getElementById('minimap-canvas');
+                this.minimapCtx = this.minimapCanvas.getContext('2d');
+                this.minimapPlane = document.getElementById('minimap-plane');
+
                 window.addEventListener('click', () => {
                     SoundEngine.init();
                     let bgm = document.querySelector('#bgm');
@@ -168,7 +171,7 @@
                 this.exitEl = null;
                 this.shardsCollected = 0;
                 this.levelWon = false;
-                this.virus = null; // Επαναφορά ιού
+                this.virus = null; 
                 
                 this.activeWallColor.set(TRON_COLORS.heroCyan);
 
@@ -176,16 +179,16 @@
                     this.skyEl.setAttribute('src', `image${level}.jpg`);
                 }
 
-                let mapSize = 7 + (level * 2); 
+                this.mapSize = 7 + (level * 2); 
                 this.totalShards = 2 + Math.floor(level / 2); 
-                this.currentMap = this.generateMap(mapSize);
+                this.currentMap = this.generateMap(this.mapSize);
                 
                 this.timeRemaining = 45 + (level * 15);
                 this.timerActive = true;
 
                 let emptySpots = [];
-                for (let z = 1; z < mapSize - 1; z++) {
-                    for (let x = 1; x < mapSize - 1; x++) {
+                for (let z = 1; z < this.mapSize - 1; z++) {
+                    for (let x = 1; x < this.mapSize - 1; x++) {
                         if (this.currentMap[z][x] === 0 && (x !== 1 || z !== 1)) {
                             emptySpots.push({x, z});
                         }
@@ -193,8 +196,8 @@
                 }
                 emptySpots = emptySpots.sort(() => Math.random() - 0.5); 
 
-                for (let z = 0; z < mapSize; z++) {
-                    for (let x = 0; x < mapSize; x++) {
+                for (let z = 0; z < this.mapSize; z++) {
+                    for (let x = 0; x < this.mapSize; x++) {
                         let px = x * CELL_SIZE;
                         let pz = z * CELL_SIZE;
 
@@ -251,13 +254,11 @@
                 exitLight.setAttribute('distance', 15);
                 this.exitEl.appendChild(exitLight);
 
-                // --- ΔΗΜΙΟΥΡΓΙΑ ΤΟΥ ΠΑΛΛΟΜΕΝΟΥ ΙΟΥ (VIRUS MASS) ---
                 this.virus = document.createElement('a-entity');
-                let virusStartX = (mapSize - 2) * CELL_SIZE; // Στην άλλη άκρη του λαβύρινθου
-                let virusStartZ = (mapSize - 2) * CELL_SIZE;
+                let virusStartX = (this.mapSize - 2) * CELL_SIZE; 
+                let virusStartZ = (this.mapSize - 2) * CELL_SIZE;
                 this.virus.setAttribute('position', `${virusStartX} 1.6 ${virusStartZ}`);
 
-                // Προσθήκη 5 ακανόνιστων στοιχείων για να μοιάζει με μάζα
                 for(let i=0; i<5; i++) {
                     let blob = document.createElement('a-dodecahedron');
                     let ox = (Math.random() - 0.5) * 1.5;
@@ -267,14 +268,13 @@
                     blob.setAttribute('radius', Math.random() * 0.6 + 0.4);
                     blob.setAttribute('material', `color: #000000; emissive: ${TRON_COLORS.virusRed}; emissiveIntensity: 2; wireframe: true`);
                     
-                    let dur = 400 + Math.random() * 400; // Τυχαία ταχύτητα παλμού
+                    let dur = 400 + Math.random() * 400; 
                     blob.setAttribute('animation__scale', `property: scale; dir: alternate; dur: ${dur}; to: 1.4 1.4 1.4; loop: true`);
                     blob.setAttribute('animation__rot', `property: rotation; dur: ${dur*4}; to: ${Math.random()*360} ${Math.random()*360} ${Math.random()*360}; loop: true; easing: linear`);
                     
                     this.virus.appendChild(blob);
                 }
 
-                // Το έντονο κόκκινο φως που τον ακολουθεί
                 let vLight = document.createElement('a-light');
                 vLight.setAttribute('type', 'point');
                 vLight.setAttribute('color', TRON_COLORS.virusRed);
@@ -284,7 +284,6 @@
                 this.virus.appendChild(vLight);
 
                 this.mazeContainer.appendChild(this.virus);
-                // ----------------------------------------------------
 
                 this.player.setAttribute('position', `${1 * CELL_SIZE} 1.6 ${1 * CELL_SIZE}`);
                 this.lastPos.copy(this.player.getAttribute('position'));
@@ -298,12 +297,65 @@
                 this.updateTimerUI();
             },
 
+            // ΣΥΝΑΡΤΗΣΗ ΖΩΓΡΑΦΙΚΗΣ ΤΟΥ MINIMAP
+            updateMinimap: function() {
+                if (!this.currentMap || !this.minimapCtx) return;
+
+                let ctx = this.minimapCtx;
+                let size = 256;
+                let mapLen = this.mapSize;
+                let cSize = size / mapLen;
+
+                // 1. Καθαρισμός Καμβά (Ημιδιάφανο μαύρο φόντο)
+                ctx.clearRect(0, 0, size, size);
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+                ctx.fillRect(0, 0, size, size);
+
+                // 2. Ζωγραφική Λαβύρινθου (Τοίχοι)
+                ctx.fillStyle = 'rgba(0, 100, 255, 0.5)'; // Μπλε ημιδιάφανοι τοίχοι
+                for (let z = 0; z < mapLen; z++) {
+                    for (let x = 0; x < mapLen; x++) {
+                        if (this.currentMap[z][x] === 1) {
+                            ctx.fillRect(x * cSize, z * cSize, cSize, cSize);
+                        }
+                    }
+                }
+
+                // 3. Ζωγραφική Παίκτη (Cyan Κουκκίδα)
+                let pPos = this.player.object3D.position;
+                let px = (pPos.x / (mapLen * CELL_SIZE)) * size;
+                let pz = (pPos.z / (mapLen * CELL_SIZE)) * size;
+                ctx.fillStyle = TRON_COLORS.heroCyan;
+                ctx.beginPath();
+                ctx.arc(px, pz, cSize / 1.5, 0, 2 * Math.PI);
+                ctx.fill();
+
+                // 4. Ζωγραφική Ιού (Κόκκινη Κουκκίδα)
+                if (this.virus) {
+                    let vPos = this.virus.object3D.position;
+                    let vx = (vPos.x / (mapLen * CELL_SIZE)) * size;
+                    let vz = (vPos.z / (mapLen * CELL_SIZE)) * size;
+                    ctx.fillStyle = TRON_COLORS.virusRed;
+                    ctx.beginPath();
+                    ctx.arc(vx, vz, cSize / 1.5, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+
+                // Ενημέρωση της υφής (texture) στο VR
+                if (this.minimapPlane && this.minimapPlane.getObject3D('mesh')) {
+                    let material = this.minimapPlane.getObject3D('mesh').material;
+                    if (material.map) material.map.needsUpdate = true;
+                }
+            },
+
             tick: function (time, timeDelta) {
                 if (this.wonGame || this.levelWon) return;
 
                 let pPos = this.player.object3D.position;
 
-                // --- ΛΟΓΙΚΗ ΧΡΟΝΟΜΕΤΡΟΥ ΚΑΙ ΙΟΥ ---
+                // Ανανέωση του χάρτη σε κάθε καρέ
+                this.updateMinimap();
+
                 if (this.timerActive) {
                     this.timeRemaining -= (timeDelta / 1000); 
                     if (this.timeRemaining <= 0) {
@@ -312,27 +364,19 @@
                     }
                     this.updateTimerUI();
 
-                    // --- ΚΙΝΗΣΗ ΙΟΥ ΠΡΟΣ ΤΟΝ ΠΑΙΚΤΗ ---
                     if (this.virus) {
                         let vPos = this.virus.object3D.position;
                         let distToPlayer = vPos.distanceTo(pPos);
                         
-                        // Αν σε πιάσει (απόσταση μικρότερη από 2.0 μέτρα)
                         if (distToPlayer < 2.0) {
                             this.triggerGameOver('virus');
                             this.virus = null;
                         } else {
-                            // Ταχύτητα: Κανονική = 1.5 | Εξαγριωμένη (κάτω από 20s) = 4.5
                             let speed = this.timeRemaining < 20 ? 4.5 : 1.5; 
-                            
-                            // Υπολογισμός κατεύθυνσης
                             let dir = new THREE.Vector3().subVectors(pPos, vPos).normalize();
                             
-                            // Κίνηση ομαλή
                             vPos.x += dir.x * speed * (timeDelta / 1000);
                             vPos.z += dir.z * speed * (timeDelta / 1000);
-                            
-                            // Μικρή αιώρηση πάνω-κάτω για έξτρα "οργανική" αίσθηση
                             vPos.y = 1.6 + Math.sin(time / 200) * 0.3;
                         }
                     }
@@ -413,7 +457,6 @@
                     SoundEngine.playPortalOpen();
                     this.timerActive = false;
                     
-                    // Καταστροφή του Ιού όταν ανοίξει το Portal (Σωτηρία!)
                     if(this.virus && this.virus.parentNode) {
                         this.virus.parentNode.removeChild(this.virus);
                         this.virus = null;
@@ -438,7 +481,6 @@
                 this.timerActive = false;
                 SoundEngine.playDerezzed();
                 
-                // Δυναμικό μήνυμα ανάλογα με το αν σε έπιασε ο ιός ή τελείωσε ο χρόνος
                 if (reason === 'virus') {
                     this.messageUI.innerText = "ΚΡΙΣΙΜΟ ΣΦΑΛΜΑ: ΜΟΛΥΝΣΗ ΑΠΟ ΙΟ\nΕΠΑΝΑΦΟΡΑ ΣΥΣΤΗΜΑΤΟΣ.";
                 } else {
@@ -458,7 +500,6 @@
                 this.timerUI.innerText = `TIME: ${secs}s`;
                 
                 if (secs <= 20) {
-                    // Οπτική προειδοποίηση ότι ο Ιός εξαγριώθηκε (Κόκκινο)
                     this.timerUI.style.color = TRON_COLORS.virusRed;
                     this.timerUI.style.borderColor = TRON_COLORS.virusRed;
                 } else {
@@ -483,6 +524,10 @@
                     this.invUI.style.display = 'none';
                     this.levelUI.style.display = 'none';
                     this.timerUI.style.display = 'none';
+                    
+                    // Κρύψιμο του minimap στο τέλος
+                    if(this.minimapPlane) this.minimapPlane.setAttribute('visible', 'false');
+
                     this.messageUI.innerText = "ΠΡΟΣΒΑΣΗ ΣΤΟΝ ΔΗΜΙΟΥΡΓΟ...";
                     this.messageUI.style.color = TRON_COLORS.dataWhite;
                     this.messageUI.style.borderColor = TRON_COLORS.dataWhite;
@@ -509,6 +554,8 @@
 </head>
 <body style="margin: 0; overflow: hidden; background-color: #000;">
 
+    <canvas id="minimap-canvas" width="256" height="256" style="display:none;"></canvas>
+
     <audio id="bgm" src="music.mp3" loop="true" preload="auto"></audio> 
 
     <div style="position: absolute; top: 5%; left: 0; width: 100%; text-align: center; z-index: 100; pointer-events: none;">
@@ -533,8 +580,12 @@
         <a-light type="ambient" intensity="0.2" color="#444466"></a-light>
         <a-plane id="floor-grid" position="50 0 50" rotation="-90 0 0" width="300" height="300" color="#0000FF" wireframe="true" wireframe-linewidth="1" material="shader: flat"></a-plane>
         <a-entity id="maze-container"></a-entity>
+        
         <a-entity id="camera" camera look-controls wasd-controls="acceleration: 25">
             <a-light type="point" intensity="0.5" distance="10" color="#00FFFF" position="0 0 -1"></a-light>
+            
+            <a-plane id="minimap-plane" position="-1.5 0.8 -2" width="0.8" height="0.8" material="src: #minimap-canvas; transparent: true; opacity: 0.8; shader: flat"></a-plane>
+            
         </a-entity>
     </a-scene>
 

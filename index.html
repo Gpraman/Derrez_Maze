@@ -130,10 +130,19 @@
                 this.activeWallColor = new THREE.Color(TRON_COLORS.heroCyan);
                 this.enemyColorObj = new THREE.Color(TRON_COLORS.enemyOrange);
                 
-                // Προετοιμασία Minimap
                 this.minimapCanvas = document.getElementById('minimap-canvas');
                 this.minimapCtx = this.minimapCanvas.getContext('2d');
                 this.minimapPlane = document.getElementById('minimap-plane');
+
+                // Λειτουργία On/Off για το Ραντάρ με το πλήκτρο 'M'
+                window.addEventListener('keydown', (e) => {
+                    if (e.key.toLowerCase() === 'm') {
+                        if (this.minimapPlane) {
+                            let isVisible = this.minimapPlane.getAttribute('visible');
+                            this.minimapPlane.setAttribute('visible', !isVisible);
+                        }
+                    }
+                });
 
                 window.addEventListener('click', () => {
                     SoundEngine.init();
@@ -290,14 +299,14 @@
                 
                 this.floor.setAttribute('color', TRON_COLORS.gridBlue);
                 this.levelUI.innerText = `SECTOR: ${this.currentLevel} / ${this.maxLevels}`;
-                this.messageUI.innerText = "ΚΑΝΕ ΚΛΙΚ ΓΙΑ ΕΝΕΡΓΟΠΟΙΗΣΗ ΣΥΣΤΗΜΑΤΟΣ";
+                this.messageUI.innerText = "ΚΛΙΚ ΓΙΑ ΕΝΑΡΞΗ | [M] ΓΙΑ RADAR"; // Ενημέρωση UI για το κουμπί
                 this.messageUI.style.color = TRON_COLORS.dataWhite;
                 this.messageUI.style.borderColor = TRON_COLORS.heroCyan;
                 this.updateUI();
                 this.updateTimerUI();
             },
 
-            // ΣΥΝΑΡΤΗΣΗ ΖΩΓΡΑΦΙΚΗΣ ΤΟΥ MINIMAP
+            // ΒΕΛΤΙΩΜΕΝΟ ΚΥΚΛΙΚΟ MINIMAP (RADAR)
             updateMinimap: function() {
                 if (!this.currentMap || !this.minimapCtx) return;
 
@@ -306,22 +315,43 @@
                 let mapLen = this.mapSize;
                 let cSize = size / mapLen;
 
-                // 1. Καθαρισμός Καμβά (Ημιδιάφανο μαύρο φόντο)
                 ctx.clearRect(0, 0, size, size);
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-                ctx.fillRect(0, 0, size, size);
 
-                // 2. Ζωγραφική Λαβύρινθου (Τοίχοι)
-                ctx.fillStyle = 'rgba(0, 100, 255, 0.5)'; // Μπλε ημιδιάφανοι τοίχοι
+                // Δημιουργία Κυκλικού "Τζαμιού" 
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(size / 2, size / 2, size / 2 - 4, 0, 2 * Math.PI);
+                
+                // Ημιδιάφανο φόντο ραντάρ
+                ctx.fillStyle = 'rgba(0, 15, 30, 0.4)';
+                ctx.fill();
+                
+                // Λεπτό εξωτερικό περίγραμμα
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = 'rgba(0, 255, 255, 0.3)';
+                ctx.stroke();
+                
+                ctx.clip(); // Περιορίζει τα πάντα μέσα στον κύκλο
+
+                // Ζωγραφική Λαβύρινθου (Διακριτικά μπλε τετράγωνα)
+                ctx.fillStyle = 'rgba(0, 255, 255, 0.15)'; 
                 for (let z = 0; z < mapLen; z++) {
                     for (let x = 0; x < mapLen; x++) {
                         if (this.currentMap[z][x] === 1) {
-                            ctx.fillRect(x * cSize, z * cSize, cSize, cSize);
+                            ctx.fillRect(x * cSize, z * cSize, cSize - 1, cSize - 1);
                         }
                     }
                 }
 
-                // 3. Ζωγραφική Παίκτη (Cyan Κουκκίδα)
+                // Σταυρόνημα Ραντάρ (Crosshair lines)
+                ctx.beginPath();
+                ctx.moveTo(size / 2, 0); ctx.lineTo(size / 2, size);
+                ctx.moveTo(0, size / 2); ctx.lineTo(size, size / 2);
+                ctx.lineWidth = 1;
+                ctx.strokeStyle = 'rgba(0, 255, 255, 0.1)';
+                ctx.stroke();
+
+                // Ζωγραφική Παίκτη (Cyan Κουκκίδα)
                 let pPos = this.player.object3D.position;
                 let px = (pPos.x / (mapLen * CELL_SIZE)) * size;
                 let pz = (pPos.z / (mapLen * CELL_SIZE)) * size;
@@ -330,18 +360,19 @@
                 ctx.arc(px, pz, cSize / 1.5, 0, 2 * Math.PI);
                 ctx.fill();
 
-                // 4. Ζωγραφική Ιού (Κόκκινη Κουκκίδα)
+                // Ζωγραφική Ιού (Κόκκινη Κουκκίδα)
                 if (this.virus) {
                     let vPos = this.virus.object3D.position;
                     let vx = (vPos.x / (mapLen * CELL_SIZE)) * size;
                     let vz = (vPos.z / (mapLen * CELL_SIZE)) * size;
                     ctx.fillStyle = TRON_COLORS.virusRed;
                     ctx.beginPath();
-                    ctx.arc(vx, vz, cSize / 1.5, 0, 2 * Math.PI);
+                    ctx.arc(vx, vz, cSize / 1.2, 0, 2 * Math.PI);
                     ctx.fill();
                 }
 
-                // Ενημέρωση της υφής (texture) στο VR
+                ctx.restore();
+
                 if (this.minimapPlane && this.minimapPlane.getObject3D('mesh')) {
                     let material = this.minimapPlane.getObject3D('mesh').material;
                     if (material.map) material.map.needsUpdate = true;
@@ -353,7 +384,6 @@
 
                 let pPos = this.player.object3D.position;
 
-                // Ανανέωση του χάρτη σε κάθε καρέ
                 this.updateMinimap();
 
                 if (this.timerActive) {
@@ -525,7 +555,6 @@
                     this.levelUI.style.display = 'none';
                     this.timerUI.style.display = 'none';
                     
-                    // Κρύψιμο του minimap στο τέλος
                     if(this.minimapPlane) this.minimapPlane.setAttribute('visible', 'false');
 
                     this.messageUI.innerText = "ΠΡΟΣΒΑΣΗ ΣΤΟΝ ΔΗΜΙΟΥΡΓΟ...";
@@ -584,7 +613,7 @@
         <a-entity id="camera" camera look-controls wasd-controls="acceleration: 25">
             <a-light type="point" intensity="0.5" distance="10" color="#00FFFF" position="0 0 -1"></a-light>
             
-            <a-plane id="minimap-plane" position="-1.5 0.8 -2" width="0.8" height="0.8" material="src: #minimap-canvas; transparent: true; opacity: 0.8; shader: flat"></a-plane>
+            <a-plane id="minimap-plane" position="0 -0.8 -1.5" rotation="-20 0 0" width="0.6" height="0.6" material="src: #minimap-canvas; transparent: true; opacity: 0.85; shader: flat" visible="true"></a-plane>
             
         </a-entity>
     </a-scene>

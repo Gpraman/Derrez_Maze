@@ -66,7 +66,7 @@
                 this.timerActive = false;
                 
                 this.virus = null;
-                this.virusTarget = new THREE.Vector3(); // Ο επόμενος κόμβος του ιού
+                this.virusTarget = new THREE.Vector3();
                 
                 this.activeWallColor = new THREE.Color(TRON_COLORS.heroCyan);
                 this.enemyColorObj = new THREE.Color(TRON_COLORS.enemyOrange);
@@ -132,7 +132,8 @@
                             let wall = document.createElement('a-box');
                             wall.setAttribute('position', `${x * CELL_SIZE} 2 ${z * CELL_SIZE}`);
                             wall.setAttribute('width', CELL_SIZE); wall.setAttribute('height', 4); wall.setAttribute('depth', CELL_SIZE);
-                            wall.setAttribute('material', `color: #050505; wireframe: false; transparent: true; opacity: 0.95; roughness: 0.2; metalness: 0.8`);
+                            // Προσθήκη side: double για να είναι συμπαγές το υλικό και από τις δύο πλευρές
+                            wall.setAttribute('material', `color: #050505; roughness: 0.2; metalness: 0.8; side: double`);
                             this.mazeContainer.appendChild(wall);
                             this.walls.push(wall);
                         }
@@ -162,12 +163,10 @@
                 this.exitEl.setAttribute('material', `color: ${TRON_COLORS.dataWhite}; emissive: ${TRON_COLORS.enemyOrange}; emissiveIntensity: 5; shader: flat; opacity: 0.7; transparent: true`);
                 this.exitEl.setAttribute('visible', 'false'); this.mazeContainer.appendChild(this.exitEl);
 
-                // --- ΔΗΜΙΟΥΡΓΙΑ ΙΟΥ (CORRUPTION) ---
                 this.virus = document.createElement('a-entity');
                 let vX = (this.mapSize - 2) * CELL_SIZE; let vZ = (this.mapSize - 2) * CELL_SIZE;
                 this.virus.setAttribute('position', `${vX} 1.6 ${vZ}`);
                 this.virusTarget.set(vX, 1.6, vZ);
-
                 let core = document.createElement('a-tetrahedron');
                 core.setAttribute('radius', '1.2'); core.setAttribute('material', `color: #000; emissive: ${TRON_COLORS.virusGlitch}; emissiveIntensity: 1; wireframe: true`);
                 core.setAttribute('animation', `property: rotation; dur: 1000; to: 360 360 360; loop: true; easing: linear`);
@@ -212,43 +211,25 @@
                 }
             },
 
-            // --- SMART PATHFINDING ΓΙΑ ΤΟΝ ΙΟ ---
             moveVirus: function(timeDelta) {
                 if (!this.virus) return;
                 let vPos = this.virus.object3D.position;
                 let pPos = this.player.object3D.position;
-
-                // Αν έφτασε στον τρέχοντα στόχο, βρες τον επόμενο
                 if (vPos.distanceTo(this.virusTarget) < 0.1) {
                     let currX = Math.round(vPos.x / CELL_SIZE);
                     let currZ = Math.round(vPos.z / CELL_SIZE);
-                    
-                    let possibleDirs = [
-                        {x: currX + 1, z: currZ}, {x: currX - 1, z: currZ},
-                        {x: currX, z: currZ + 1}, {x: currX, z: currZ - 1}
-                    ];
-
-                    let bestDir = null;
-                    let minDist = Infinity;
-
+                    let possibleDirs = [{x:currX+1, z:currZ}, {x:currX-1, z:currZ}, {x:currX, z:currZ+1}, {x:currX, z:currZ-1}];
+                    let bestDir = null; let minDist = Infinity;
                     possibleDirs.forEach(dir => {
                         if (dir.z >= 0 && dir.z < this.mapSize && dir.x >= 0 && dir.x < this.mapSize) {
-                            if (this.currentMap[dir.z][dir.x] !== 1) { // Αν δεν είναι τοίχος
+                            if (this.currentMap[dir.z][dir.x] !== 1) {
                                 let distToPlayer = Math.sqrt(Math.pow(dir.x * CELL_SIZE - pPos.x, 2) + Math.pow(dir.z * CELL_SIZE - pPos.z, 2));
-                                if (distToPlayer < minDist) {
-                                    minDist = distToPlayer;
-                                    bestDir = dir;
-                                }
+                                if (distToPlayer < minDist) { minDist = distToPlayer; bestDir = dir; }
                             }
                         }
                     });
-
-                    if (bestDir) {
-                        this.virusTarget.set(bestDir.x * CELL_SIZE, 1.6, bestDir.z * CELL_SIZE);
-                    }
+                    if (bestDir) this.virusTarget.set(bestDir.x * CELL_SIZE, 1.6, bestDir.z * CELL_SIZE);
                 }
-
-                // Κίνηση προς τον στόχο
                 let speed = this.timeRemaining < 20 ? 4.0 : 1.8;
                 let moveDir = new THREE.Vector3().subVectors(this.virusTarget, vPos).normalize();
                 vPos.addScaledVector(moveDir, speed * timeDelta);
@@ -264,12 +245,9 @@
                     this.timeRemaining -= dt; 
                     if (this.timeRemaining <= 0) this.triggerGameOver('timeout');
                     this.updateTimerUI();
-
                     if (this.virus) {
                         this.moveVirus(dt);
-                        if (this.virus.object3D.position.distanceTo(pPos) < 2.0) {
-                            this.triggerGameOver('virus');
-                        }
+                        if (this.virus.object3D.position.distanceTo(pPos) < 2.0) this.triggerGameOver('virus');
                     }
                 }
 
@@ -287,9 +265,7 @@
                 });
 
                 this.shards.forEach(shard => {
-                    if (shard.parentNode) {
-                        shard.setAttribute('visible', pPos.distanceTo(shard.object3D.position) < 6);
-                    }
+                    if (shard.parentNode) shard.setAttribute('visible', pPos.distanceTo(shard.object3D.position) < 6);
                 });
 
                 if (gridZ >= 0 && gridZ < this.mapSize && gridX >= 0 && gridX < this.mapSize) {
@@ -366,7 +342,8 @@
         <a-sky id="sky-bg" src="image1.jpg" material="fog: false"></a-sky>
         <a-plane id="floor-grid" rotation="-90 0 0" width="300" height="300" wireframe="true" material="shader: flat"></a-plane>
         <a-entity id="maze-container"></a-entity>
-        <a-entity id="camera" camera look-controls wasd-controls="acceleration: 25">
+        
+        <a-entity id="camera" camera="near: 0.1" look-controls wasd-controls="acceleration: 25">
             <a-light type="point" intensity="0.5" distance="10" color="#00FFFF"></a-light>
             <a-plane id="minimap-plane" position="0 -0.8 -1.5" rotation="-20 0 0" width="0.6" height="0.6" material="src: #minimap-canvas; transparent: true; opacity: 0.85; shader: flat"></a-plane>
         </a-entity>

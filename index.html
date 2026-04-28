@@ -197,7 +197,8 @@
                             wall.setAttribute('width', CELL_SIZE);
                             wall.setAttribute('height', 4);
                             wall.setAttribute('depth', CELL_SIZE);
-                            wall.setAttribute('material', `color: ${TRON_COLORS.skyBlack}; wireframe: true; transparent: true; opacity: 0.05`);
+                            // Νέα υφή: Συμπαγές, γυαλιστερό σκούρο κρύσταλλο
+                            wall.setAttribute('material', `color: #050505; wireframe: false; transparent: true; opacity: 0.95; roughness: 0.2; metalness: 0.8`);
                             this.mazeContainer.appendChild(wall);
                             this.walls.push(wall);
                         }
@@ -272,6 +273,7 @@
                 let gridX = Math.round(pos.x / CELL_SIZE);
                 let gridZ = Math.round(pos.z / CELL_SIZE);
 
+                // --- REZZING SYSTEM ΠΡΟΣΑΡΜΟΣΜΕΝΟ ΓΙΑ ΣΥΜΠΑΓΕΙΣ ΤΟΙΧΟΥΣ ---
                 let rezRadius = 16; 
                 this.walls.forEach(wall => {
                     let mesh = wall.getObject3D('mesh');
@@ -280,8 +282,8 @@
                         let intensity = Math.max(0.0, 1 - (dist / rezRadius));
                         
                         mesh.material.emissive = this.activeWallColor;
-                        mesh.material.emissiveIntensity = intensity * 2;
-                        mesh.material.opacity = Math.max(0.05, intensity); 
+                        mesh.material.emissiveIntensity = intensity * 2.5; // Φωτίζονται καθώς πλησιάζεις
+                        mesh.material.opacity = 0.95; // Παραμένουν πάντα συμπαγείς
                     }
                 });
 

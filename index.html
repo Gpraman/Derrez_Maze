@@ -4,23 +4,54 @@
     <meta charset="utf-8">
     <title>VR II: The Grid - TRON Legacy Edition</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    <script>
-        const CELL_SIZE = 4;
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f0f0; margin: 0; padding: 20px; color: #333; }
+        h1, h3 { text-align: center; margin: 5px 0; }
+        .container { max-width: 1000px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
         
-        const TRON_COLORS = {
-            heroCyan: '#00FFFF',
-            enemyOrange: '#FF4500',
-            dataWhite: '#FFFFFF',
-            gridBlue: '#0000FF',
-            skyBlack: '#000000',
-            neonMagenta: '#FF00FF',
-            neonLime: '#00FF00',
-            neonPurple: '#BF00FF',
-            neonYellow: '#FFFF00',
-            virusRed: '#FF0000',
-            virusGlitch: '#FF3300'
-        };
+        /* Το layout της σκηνής */
+        .scene-wrapper { 
+            position: relative; 
+            width: 80%; 
+            height: 500px; 
+            margin: 20px auto; 
+            border: 2px solid #2c3e50; 
+            overflow: hidden;
+            background: #000;
+        }
+        
+        a-scene { width: 100%; height: 100%; }
 
+        /* Προσαρμογή του HUD για να μένει ΜΕΣΑ στη σκηνή */
+        #game-hud {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            z-index: 10;
+            pointer-events: none;
+            font-family: monospace;
+        }
+        .hud-item {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 5px 10px;
+            border: 1px solid #00FFFF;
+            display: inline-block;
+            margin: 2px;
+            font-size: 14px;
+        }
+        hr { border: 0; border-top: 1px solid #eee; margin: 20px 0; }
+    </style>
+
+    <script>
+        // --- Ο ΔΙΚΟΣ ΣΟΥ ΚΩΔΙΚΑΣ JAVASCRIPT ---
+        const CELL_SIZE = 4;
+        const TRON_COLORS = {
+            heroCyan: '#00FFFF', enemyOrange: '#FF4500', dataWhite: '#FFFFFF',
+            gridBlue: '#0000FF', skyBlack: '#000000', neonMagenta: '#FF00FF',
+            neonLime: '#00FF00', neonPurple: '#BF00FF', neonYellow: '#FFFF00',
+            virusRed: '#FF0000', virusGlitch: '#FF3300'
+        };
         const COLOR_CYCLE = [TRON_COLORS.heroCyan, TRON_COLORS.neonMagenta, TRON_COLORS.neonLime, TRON_COLORS.neonPurple, TRON_COLORS.neonYellow];
 
         const SoundEngine = {
@@ -64,10 +95,8 @@
                 this.lastPos = new THREE.Vector3();
                 this.wonGame = false;
                 this.timerActive = false;
-                
                 this.virus = null;
                 this.virusTarget = new THREE.Vector3();
-                
                 this.activeWallColor = new THREE.Color(TRON_COLORS.heroCyan);
                 this.enemyColorObj = new THREE.Color(TRON_COLORS.enemyOrange);
                 
@@ -112,10 +141,7 @@
                 this.activeWallColor.set(TRON_COLORS.heroCyan);
                 if (this.skyEl) this.skyEl.setAttribute('src', `image${level}.jpg`);
 
-                // Διόρθωση: Ενημέρωση του Sector HUD
-                if (this.levelUI) {
-                    this.levelUI.innerText = `SECTOR: ${level} / ${this.maxLevels}`;
-                }
+                if (this.levelUI) this.levelUI.innerText = `SECTOR: ${level} / ${this.maxLevels}`;
 
                 this.mapSize = 7 + (level * 2); 
                 this.totalShards = 2 + Math.floor(level / 2); 
@@ -333,24 +359,55 @@
         });
     </script>
 </head>
-<body style="margin: 0; overflow: hidden; background: #000;">
-    <canvas id="minimap-canvas" width="256" height="256" style="display:none;"></canvas>
-    <audio id="bgm" src="music.mp3" loop="true"></audio> 
-    <div style="position: absolute; top: 5%; width: 100%; text-align: center; z-index: 100; pointer-events: none; font-family: monospace;">
-        <div id="hud-level" style="color: #FFD700; background: rgba(0,0,0,0.8); padding: 5px 15px; border: 1px solid #FFD700; display: inline-block;">SECTOR: 1 / 10</div>
-        <div id="hud-timer" style="color: #00FFFF; background: rgba(0,0,0,0.8); padding: 5px 15px; border: 1px solid #00FFFF; display: inline-block; margin-left: 10px;">TIME: 60s</div>
-        <br><div id="hud-message" style="color: #fff; background: rgba(0,0,0,0.8); padding: 10px; border: 2px solid #00FFFF; display: inline-block; margin-top: 5px;">ΦΟΡΤΩΣΗ...</div>
-        <br><div id="hud-inv" style="color: #00FFFF; background: rgba(0,0,0,0.8); padding: 5px; border: 1px solid #00FFFF; display: inline-block; margin-top: 5px;">DISCS: 0</div>
-    </div>
-    <a-scene procedural-maze fog="type: exponential; color: #000; density: 0.015;">
-        <a-sky id="sky-bg" src="image1.jpg" material="fog: false"></a-sky>
-        <a-plane id="floor-grid" rotation="-90 0 0" width="300" height="300" wireframe="true" material="shader: flat"></a-plane>
-        <a-entity id="maze-container"></a-entity>
+<body>
+    <div class="container">
+        <h1>THE GRID: TRON LEGACY</h1>
+        <h3>Ονοματεπώνυμο Φοιτητή</h3>
+        <hr />
         
-        <a-entity id="camera" camera="near: 0.1" look-controls wasd-controls="acceleration: 25">
-            <a-light type="point" intensity="0.5" distance="10" color="#00FFFF"></a-light>
-            <a-plane id="minimap-plane" position="0 -0.8 -1.5" rotation="-20 0 0" width="0.6" height="0.6" material="src: #minimap-canvas; transparent: true; opacity: 0.85; shader: flat"></a-plane>
-        </a-entity>
-    </a-scene>
+        <p><strong>Σενάριο:</strong> Είστε ένας Program παγιδευμένος στο Grid. Πρέπει να συλλέξετε τα Data Discs για να ανοίξετε το Portal εξόδου πριν σας προλάβει ο Ιός ή τελειώσει ο χρόνος συστήματος.</p>
+        
+        <hr />
+        
+        <!-- WRAPPER ΓΙΑ ΤΗ ΣΚΗΝΗ -->
+        <div class="scene-wrapper">
+            <!-- HUD ELEMENTS (Μέσα στη σκηνή) -->
+            <div id="game-hud">
+                <div id="hud-level" class="hud-item" style="color: #FFD700;">SECTOR: 1 / 10</div>
+                <div id="hud-timer" class="hud-item" style="color: #00FFFF;">TIME: 60s</div>
+                <br>
+                <div id="hud-message" class="hud-item" style="color: #fff; border-width: 2px; margin-top: 5px;">ΦΟΡΤΩΣΗ...</div>
+                <br>
+                <div id="hud-inv" class="hud-item" style="color: #00FFFF; margin-top: 5px;">DISCS: 0</div>
+            </div>
+
+            <!-- A-FRAME SCENE -->
+            <canvas id="minimap-canvas" width="256" height="256" style="display:none;"></canvas>
+            <audio id="bgm" src="music.mp3" loop="true"></audio> 
+            
+            <a-scene procedural-maze embedded ondblclick="this.requestFullscreen();" fog="type: exponential; color: #000; density: 0.015;">
+                <a-sky id="sky-bg" src="image1.jpg" material="fog: false"></a-sky>
+                <a-plane id="floor-grid" rotation="-90 0 0" width="300" height="300" wireframe="true" material="shader: flat"></a-plane>
+                <a-entity id="maze-container"></a-entity>
+                
+                <a-entity id="camera" camera="near: 0.1" look-controls wasd-controls="acceleration: 25">
+                    <a-light type="point" intensity="0.5" distance="10" color="#00FFFF"></a-light>
+                    <a-plane id="minimap-plane" position="0 -0.8 -1.5" rotation="-20 0 0" width="0.6" height="0.6" material="src: #minimap-canvas; transparent: true; opacity: 0.85; shader: flat"></a-plane>
+                </a-entity>
+            </a-scene>
+        </div>
+
+        <hr />
+        <p><strong>Οδηγίες:</strong> 
+            <ul>
+                <li><strong>WASD:</strong> Κίνηση στον χώρο.</li>
+                <li><strong>Mouse:</strong> Περιστροφή κάμερας.</li>
+                <li><strong>[M]:</strong> Ενεργοποίηση/Απενεργοποίηση Radar.</li>
+                <li><strong>Double Click:</strong> Fullscreen Mode.</li>
+            </ul>
+        </p>
+        <hr />
+        <p><strong>Credits:</strong> Framework: A-Frame | Logic: Custom Procedural Maze | Audio: Web Audio API Synthesizer.</p>
+    </div>
 </body>
 </html>
